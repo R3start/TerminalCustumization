@@ -39,7 +39,7 @@ oh-my-posh font install
 #### Windows:
    Add initialization in PowerShell/Windows PowerShell
    You can find profile file location by writing `$PROFILE` in terminal
-   Add `oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/craver.omp.json" | Invoke-Expression` to init Starship on each opening
+   Add `oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/microverse-power.omp.json" | Invoke-Expression` to init Starship on each opening
 
    You can copy existing profiles from the Configs dir to `$PROFILE/Documents/`(Windows) or `$HOME\Documents\PowerShell\`
 
@@ -48,7 +48,7 @@ oh-my-posh font install
    ```bash
    nano ~/.bashrc
    # Add to file in the end:
-   eval "$(oh-my-posh init bash --config ~/.poshthemes/craver.omp.json)"
+   eval "$(oh-my-posh init bash --config ~/.poshthemes/microverse-power.omp.json)"
 
    # Re open bash
    exec bash
