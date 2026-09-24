@@ -1,0 +1,10 @@
+# ripgrep defaults (loaded through RIPGREP_CONFIG_PATH)
+--smart-case
+--hidden
+--glob=!.git/
+# Colours follow the oh-my-posh "microverse-power" palette
+--colors=path:fg:0x33,0xDD,0x2D
+--colors=line:fg:0x3A,0x86,0xFF
+--colors=column:fg:0x3A,0x86,0xFF
+--colors=match:fg:0xF1,0x18,0x4C
+--colors=match:style:bold

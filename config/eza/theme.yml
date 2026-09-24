@@ -1,0 +1,59 @@
+# eza theme matching the oh-my-posh "microverse-power" palette.
+# Loaded from $EZA_CONFIG_DIR/theme.yml (set by the shell configs).
+filekinds:
+  normal:       {foreground: "#d0d0d0"}
+  directory:    {foreground: "#3A86FF", is_bold: true}
+  symlink:      {foreground: "#2EC4E6"}
+  executable:   {foreground: "#33DD2D", is_bold: true}
+  pipe:         {foreground: "#FFBB00"}
+  socket:       {foreground: "#FFBB00"}
+  block_device: {foreground: "#FFBB00", is_bold: true}
+  char_device:  {foreground: "#FFBB00", is_bold: true}
+  mount_point:  {foreground: "#3A86FF", is_underline: true}
+perms:
+  user_read:          {foreground: "#FFBB00", is_bold: true}
+  user_write:         {foreground: "#f1184c", is_bold: true}
+  user_execute_file:  {foreground: "#33DD2D", is_bold: true}
+  user_execute_other: {foreground: "#33DD2D", is_bold: true}
+  group_read:    {foreground: "#FFBB00"}
+  group_write:   {foreground: "#f1184c"}
+  group_execute: {foreground: "#33DD2D"}
+  other_read:    {foreground: "#FFBB00"}
+  other_write:   {foreground: "#f1184c"}
+  other_execute: {foreground: "#33DD2D"}
+size:
+  number_byte: {foreground: "#33DD2D"}
+  number_kilo: {foreground: "#33DD2D"}
+  number_mega: {foreground: "#FFBB00"}
+  number_giga: {foreground: "#f1184c"}
+  number_huge: {foreground: "#f1184c", is_bold: true}
+  unit_byte:   {foreground: "#33DD2D"}
+  unit_kilo:   {foreground: "#33DD2D"}
+  unit_mega:   {foreground: "#FFBB00"}
+  unit_giga:   {foreground: "#f1184c"}
+  unit_huge:   {foreground: "#f1184c", is_bold: true}
+users:
+  user_you:    {foreground: "#FFBB00"}
+  user_root:   {foreground: "#f1184c", is_bold: true}
+  user_other:  {foreground: "#d0d0d0"}
+  group_yours: {foreground: "#FFBB00"}
+  group_root:  {foreground: "#f1184c"}
+  group_other: {foreground: "#d0d0d0"}
+git:
+  new:        {foreground: "#33DD2D"}
+  modified:   {foreground: "#FFBB00"}
+  deleted:    {foreground: "#f1184c"}
+  renamed:    {foreground: "#3A86FF"}
+  typechange: {foreground: "#3A86FF"}
+  ignored:    {foreground: "#6c6c6c"}
+  conflicted: {foreground: "#f1184c", is_bold: true}
+git_repo:
+  branch_main:  {foreground: "#3A86FF"}
+  branch_other: {foreground: "#FFBB00"}
+  git_clean:    {foreground: "#33DD2D"}
+  git_dirty:    {foreground: "#f1184c"}
+punctuation:  {foreground: "#6c6c6c"}
+date:         {foreground: "#FFBB00"}
+header:       {foreground: "#3A86FF", is_underline: true}
+symlink_path: {foreground: "#2EC4E6"}
+broken_symlink: {foreground: "#f1184c", is_bold: true}

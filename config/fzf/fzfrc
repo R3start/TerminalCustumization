@@ -1,0 +1,10 @@
+--height=60%
+--layout=reverse
+--border=rounded
+--info=inline-right
+--prompt='➜ '
+--pointer='▶'
+--marker='+'
+--color=fg:#d0d0d0,fg+:#ffffff,bg+:#242424,hl:#3A86FF,hl+:#3A86FF
+--color=info:#FFBB00,prompt:#f1184c,pointer:#f1184c,marker:#33DD2D,spinner:#FFBB00
+--color=header:#33DD2D,border:#3A86FF,label:#FFBB00,query:#ffffff
