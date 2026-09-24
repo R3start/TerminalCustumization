@@ -44,8 +44,9 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 **Changes compared to the previous version of this repo**
 
 - PSReadLine and Terminal-Icons are no longer used. fzf (history, files, directories), zoxide (jumping)
-  and eza (icons) replace them. The installer removes the copies installed from the PowerShell Gallery.
-  The copy of PSReadLine that ships inside PowerShell can't be removed; this setup simply doesn't configure it.
+  and eza (icons) replace them. The installer tells you when the PowerShell Gallery copies from the old setup
+  are still installed; `-RemoveOldModules` uninstalls them. The copy of PSReadLine that ships inside PowerShell
+  can't be removed; this setup simply doesn't configure it.
 - The bundled Nerd Font v2 files are gone. The latest JetBrainsMono Nerd Font (v3, family name
   `JetBrainsMono Nerd Font`) is downloaded instead.
 - Oh My Posh no longer ships themes in `POSH_THEMES_PATH`/`~/.poshthemes`. The theme is now kept in this repo.
@@ -74,13 +75,46 @@ The installers are safe to run again. A second run only adds what is **missing**
 - **Font:** it is only installed when missing. The [upgrade scripts](#upgrading) refresh it
   (`--update-fonts` / `-UpdateFonts`).
 - **Shell configuration:** your files are never overwritten. Exactly one marked block
-  (`# >>> terminal-customization >>>`) is added, and it is replaced in place on later runs. Lines elsewhere in
-  the file that would load a tool a second time are disabled (kept as comments) and the file is backed up. For
-  example: the old README's `oh-my-posh init` line, `zoxide init` / `fzf --bash` lines, PSReadLine/Terminal-Icons
-  imports, or a hand-added copy of the source line. In bash they become `: # disabled by terminal-customization: …`,
-  which stays valid inside an `if … fi`.
+  (`# >>> terminal-customization >>>`) is added, and it is replaced in place on later runs. Statements elsewhere in
+  the file that would load a tool a second time are disabled (kept as comments) and the file is backed up. This
+  covers the old README's `oh-my-posh init` line, `zoxide init` / `fzf --bash` lines, the old
+  PSReadLine/Terminal-Icons lines and hand-added copies of the source line. Statements that span several lines are
+  disabled as a whole: PowerShell profiles are read with the PowerShell parser. Anything that can't be disabled
+  cleanly is reported instead of half-commented. Your own PSReadLine settings (`-Colors`, `-BellStyle`, …) are kept.
+  In bash, disabled lines become `: # disabled by terminal-customization: …`, which stays valid inside an `if … fi`.
+- **Files are edited in place:** a `~/.bashrc` or profile that is a symlink (stow, chezmoi, …) stays a symlink,
+  and a private file (mode 600) stays private.
 - **Backups:** a `*.tc-backup-<date>` copy is kept only when a file actually changes.
 - **Default shell:** your choice is kept.
+
+### Security
+
+- **Checksums:** on Linux every download is checked against the SHA-256 that GitHub publishes for the release asset,
+  or the project's own checksum file. A mismatch deletes the download. A tool without any published checksum is
+  **not installed** unless you pass `--allow-unverified`. Oh My Posh is downloaded as its release binary and checked
+  the same way; no install script is piped into a shell. On Windows, winget verifies every package's hash itself.
+- **GitHub token:** `GITHUB_TOKEN` is optional and only sent to the GitHub API. It is passed to `curl` through a
+  private header file, never on the command line (so it doesn't show up in `ps`).
+- **Execution policy:** `install.ps1` changes the policy only when it is still the untouched Windows default
+  (`Restricted`), and only to `RemoteSigned` for your user in Windows PowerShell 5.1. A policy you or an
+  administrator set (`AllSigned`, group policy, …) is never changed; the script tells you it blocks the profile.
+  `-KeepExecutionPolicy` means "never change it".
+- **Only undo what it did:** the installers record what they install in an *install record*
+  (`~/.local/state/terminal-customization/manifest`, or `%LOCALAPPDATA%\terminal-customization\manifest.txt`).
+  The uninstallers remove only what is in it: never a tool, winget package or font you already had. On Linux, a
+  file in `~/.local/bin` that the installer didn't put there is not overwritten unless you pass `--force`; with
+  `--force` it is backed up, and the uninstaller puts it back.
+- **Read before you run:** the one-liners below are convenient. To review a script first, download it, read it,
+  then run it:
+
+  ```bash
+  curl -fsSLO https://raw.githubusercontent.com/R3start/TerminalCustumization/main/install.sh
+  less install.sh && bash install.sh
+  ```
+  ```powershell
+  irm https://raw.githubusercontent.com/R3start/TerminalCustumization/main/install.ps1 -OutFile install.ps1
+  notepad install.ps1; powershell -ExecutionPolicy Bypass -File .\install.ps1
+  ```
 
 ### Windows 10/11
 
@@ -102,7 +136,8 @@ Options (from a clone, or with `& ([scriptblock]::Create((irm <url>))) -Option`)
 | `-SkipConfig` | only install tools and font |
 | `-NoDefaultShell` | first install: keep your current default Windows Terminal profile |
 | `-DefaultShell` | make **Nushell (Microverse)** the default profile again (re-runs don't touch it otherwise) |
-| `-KeepOldModules` | don't remove PSReadLine/Terminal-Icons installed from the PowerShell Gallery |
+| `-RemoveOldModules` | uninstall the PSReadLine/Terminal-Icons copies from the PowerShell Gallery that the old setup used (otherwise only reported) |
+| `-KeepExecutionPolicy` | never change the execution policy, only report when it blocks the profile |
 
 What it does:
 1. Installs the missing ones of Windows Terminal, PowerShell 7, Oh My Posh, Nushell, eza, bat, ripgrep, fzf,
@@ -110,15 +145,16 @@ What it does:
 2. Runs `oh-my-posh font install JetBrainsMono` if the font isn't installed yet.
 3. Copies `config/` to `%USERPROFILE%\.config\terminal-customization`.
 4. Adds one line to `Documents\PowerShell\profile.ps1` and `Documents\WindowsPowerShell\profile.ps1`.
-   Those profiles apply to all hosts, including the VS Code terminal. It also disables old
-   PSReadLine/Terminal-Icons/oh-my-posh/zoxide lines in all profile files.
+   Those profiles apply to all hosts, including the VS Code terminal. It also disables the old
+   PSReadLine/Terminal-Icons/oh-my-posh/zoxide statements in all profile files. If the profile can't run because of the
+   execution policy, the policy is changed only if it is the untouched Windows default (see [Security](#security)).
 5. Configures Nushell and the bat theme.
 6. Adds a **Nushell (Microverse)** Windows Terminal profile with the Microverse colour scheme and the Nerd Font,
    and makes it the default profile (first install only, or with `-DefaultShell`).
 
 ### Linux (x86_64 / aarch64, any distribution)
 
-Requires `curl`, `tar` and `unzip`. No root access is needed.
+Requires `curl`, `tar` and `sha256sum` (or `shasum`). No root access is needed.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/R3start/TerminalCustumization/main/install.sh | bash
@@ -135,14 +171,17 @@ Or from a clone: `./install.sh`. Pass options with `curl … | bash -s -- --opti
 | `--no-default-shell` | keep bash as the interactive shell |
 | `--default-shell` | start Nushell automatically again (re-runs keep your current choice otherwise) |
 | `--gnome-terminal` | also set the font and Microverse colours in the default GNOME Terminal profile |
-| `--force` | reinstall tools and font even if the latest version is already installed |
+| `--force` | reinstall tools and font even if the latest version is already installed, and replace files in `~/.local/bin` that the installer didn't put there (they are backed up and restored by the uninstaller) |
+| `--allow-unverified` | install a tool even if no SHA-256 checksum is published for its download |
 | `--dry-run` | print which release files would be downloaded |
 
-`GITHUB_TOKEN=<token>` avoids GitHub API rate limits on shared networks.
+`GITHUB_TOKEN=<token>` avoids GitHub API rate limits on shared networks. It also provides the GitHub asset
+digests (the fallback without the API relies on the projects' checksum files).
 
 What it does:
-1. Downloads the latest release of each tool from GitHub (static musl builds where available) into `~/.local/bin`.
-   It skips tools that are already at the latest version. Oh My Posh comes from its official install script.
+1. Downloads the latest release of each tool from GitHub (static musl builds where available), verifies its SHA-256
+   and installs it into `~/.local/bin`. It skips tools that are already at the latest version, and never overwrites
+   a file there that it didn't install. Oh My Posh is installed from its release binary the same way.
 2. Runs `oh-my-posh font install JetBrainsMono` (into `~/.local/share/fonts`) if the font isn't installed yet.
 3. Copies `config/` to `~/.config/terminal-customization`.
 4. Adds one line to `~/.bashrc` and disables lines that would load a tool twice, such as an old `oh-my-posh init bash` line.
@@ -297,14 +336,22 @@ Make sure `~/.local/bin` exists and is in your `PATH`:
 mkdir -p ~/.local/bin && export PATH="$HOME/.local/bin:$PATH"
 ```
 
-**Oh My Posh** (official installer):
+Always check a download against the SHA-256 shown next to it on the release page. GitHub lists a
+`sha256:…` digest for every asset, and most projects also publish a `checksums.txt` / `*.sha256` file.
+`sha256sum -c` prints `OK` only when the file is intact.
+
+**Oh My Posh** (release binary `posh-linux-amd64`, or `posh-linux-arm64`):
 
 ```bash
-curl -s https://ohmyposh.dev/install.sh | bash -s -- -d ~/.local/bin
+cd /tmp
+curl -LO https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/posh-linux-amd64
+echo "<sha256 from the release page>  posh-linux-amd64" | sha256sum -c -
+install -m 755 posh-linux-amd64 ~/.local/bin/oh-my-posh
+oh-my-posh version
 ```
 
-**Everything else**: open each tool's *latest release* page, download the archive listed, extract it, and copy the
-binary to `~/.local/bin`:
+**Everything else**: open each tool's *latest release* page, download the archive listed, check its SHA-256,
+extract it, and copy the binary to `~/.local/bin`:
 
 | Tool | Latest release | Archive (x86_64) | Binary |
 |------|----------------|------------------|--------|
@@ -323,12 +370,13 @@ Example for one tool:
 ```bash
 cd /tmp
 curl -LO https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-musl.tar.gz
+echo "<sha256 from the release page>  eza_x86_64-unknown-linux-musl.tar.gz" | sha256sum -c -
 tar -xzf eza_x86_64-unknown-linux-musl.tar.gz
 install -m 755 eza ~/.local/bin/
 eza --version
 ```
 
-(`./install.sh --skip-fonts --skip-config` does exactly this for every tool.)
+(`./install.sh --skip-fonts --skip-config` does exactly this for every tool, including the checksum check.)
 
 ### 2. Font
 
@@ -450,11 +498,12 @@ always match the upgraded tools. Restart the terminal afterwards.
 
 ```bash
 # 1. Oh My Posh
-oh-my-posh upgrade            # or: curl -s https://ohmyposh.dev/install.sh | bash -s -- -d ~/.local/bin
+oh-my-posh upgrade            # or download the release binary again, as in "Manual installation – Linux"
 
 # 2. every other tool: download the newest archive from its "latest release" page
 #    (table in "Manual installation – Linux") and copy the binary over the old one, e.g.
 curl -LO https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-musl.tar.gz
+echo "<sha256 from the release page>  eza_x86_64-unknown-linux-musl.tar.gz" | sha256sum -c -
 tar -xzf eza_x86_64-unknown-linux-musl.tar.gz && install -m 755 eza ~/.local/bin/
 
 # 3. font
@@ -483,12 +532,16 @@ The scripts show what they will remove and ask for confirmation (`-Yes` / `--yes
   (each edited file is backed up as `*.tc-backup-<date>` first);
 - the Nushell autoload scripts, the bat **Microverse** theme and `~/.config/terminal-customization`;
 - Windows: the **Nushell (Microverse)** Windows Terminal profile. If it was the default, PowerShell becomes the default again;
-- the tools: `winget uninstall` on Windows (Windows Terminal and PowerShell 7 are kept), the binaries in `~/.local/bin` on Linux;
-- the per-user JetBrainsMono Nerd Font.
+- the tools **the installer installed**, as listed in its install record (see [Security](#security)).
+  On Windows that is `winget uninstall` of the packages it installed; Windows Terminal and PowerShell 7 are always
+  kept. On Linux it deletes the binaries it put in `~/.local/bin`, keeps any it finds you changed since, and puts
+  back files that `install.sh --force` replaced. Tools you had before are never removed;
+- the JetBrainsMono Nerd Font files the installer added (a font you installed yourself is kept).
 
 | Windows | Linux | Keeps / also removes |
 |---------|-------|----------------------|
 | `-KeepTools` | `--keep-tools` | keep the tools |
+| `-AllTools` | `--all-tools` | also remove this setup's tools that are **not** in the install record (for installs made before the record existed). Use with care: that includes copies you installed yourself |
 | `-KeepFonts` | `--keep-fonts` | keep the font |
 | `-KeepConfig` | `--keep-config` | keep `~/.config/terminal-customization` |
 | `-Purge` | `--purge` | also delete zoxide's directory database and the Oh My Posh cache |
@@ -555,6 +608,7 @@ config/
   oh-my-posh/microverse-power.omp.json   prompt theme
   bash/terminal-customization.bash       bash config
   powershell/profile.ps1                 PowerShell 5.1/7 config
+  powershell/disable-duplicates.ps1      disables duplicate profile statements (used by the installers)
   nushell/terminal-customization.nu      Nushell config (autoload)
   nushell/config-snippet.nu              block appended to config.nu
   bat/themes/Microverse.tmTheme          bat theme

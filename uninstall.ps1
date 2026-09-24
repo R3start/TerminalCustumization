@@ -8,8 +8,10 @@
       - removes the Nushell autoload scripts, the bat theme and ~/.config/terminal-customization
       - removes the "Nushell (Microverse)" Windows Terminal profile and restores PowerShell as the
         default profile if Nushell was the default
-      - uninstalls the tools with winget (Windows Terminal and PowerShell 7 are kept)
-      - removes the per-user JetBrainsMono Nerd Font
+      - uninstalls the winget packages that install.ps1 installed (recorded in
+        %LOCALAPPDATA%\terminal-customization\manifest.txt); tools you already had are kept
+      - removes the JetBrainsMono Nerd Font files that install.ps1 added (a font you
+        installed yourself is kept)
     Every edited file is backed up first (*.tc-backup-<date>).
 
 .EXAMPLE
@@ -20,9 +22,12 @@
 #>
 [CmdletBinding()]
 param(
-    # Keep the tools installed with winget
+    # Keep the tools install.ps1 installed with winget
     [switch]$KeepTools,
-    # Keep the JetBrainsMono Nerd Font
+    # Also uninstall the tools this setup uses when they are not in the install record
+    # (installs made before the record existed). Windows Terminal and PowerShell 7 are always kept.
+    [switch]$AllTools,
+    # Keep the JetBrainsMono Nerd Font files install.ps1 added
     [switch]$KeepFonts,
     # Keep ~/.config/terminal-customization (shell integration is still removed)
     [switch]$KeepConfig,
@@ -37,6 +42,8 @@ $TcHome = Join-Path $HOME '.config\terminal-customization'
 $MarkBegin = '# >>> terminal-customization >>>'
 $MarkEnd = '# <<< terminal-customization <<<'
 $WtProfileName = 'Nushell (Microverse)'
+$StateDir = Join-Path $env:LOCALAPPDATA 'terminal-customization'
+$Manifest = Join-Path $StateDir 'manifest.txt'
 $WingetTools = 'JanDeDobbeleer.OhMyPosh', 'Nushell.Nushell', 'eza-community.eza', 'sharkdp.bat',
     'BurntSushi.ripgrep.MSVC', 'junegunn.fzf', 'ajeetdsouza.zoxide', 'muesli.duf', 'bootandy.dust', 'GitHub.cli'
 # Well-known Windows Terminal profile GUIDs
@@ -81,6 +88,17 @@ function Remove-MarkedBlock([string]$Path) {
     return $true
 }
 
+function Get-ManifestEntries([string]$Kind) {
+    if (-not (Test-Path $Manifest)) { return @() }
+    @(Get-Content $Manifest | Where-Object { $_ -like "$Kind`t*" } | ForEach-Object { $_.Substring($Kind.Length + 1) })
+}
+
+function Remove-ManifestEntries([string]$Kind) {
+    if (-not (Test-Path $Manifest)) { return }
+    $keep = @(Get-Content $Manifest | Where-Object { $_ -and $_ -notlike "$Kind`t*" })
+    if ($keep) { Set-Content -Path $Manifest -Value $keep -Encoding UTF8 } else { Remove-Item $Manifest -Force }
+}
+
 function Remove-IfExists([string]$Path) {
     if (Test-Path $Path) { Remove-Item $Path -Recurse -Force; Write-Ok "removed $Path" }
 }
@@ -90,8 +108,14 @@ Write-Host 'This will remove the TerminalCustumization setup:'
 Write-Host '  - the terminal-customization blocks in the PowerShell profiles and Nushell config.nu'
 Write-Host "  - the Nushell autoload scripts, the bat 'Microverse' theme and the '$WtProfileName' Windows Terminal profile"
 if (-not $KeepConfig) { Write-Host "  - $TcHome" }
-if (-not $KeepTools)  { Write-Host "  - winget packages: $($WingetTools -join ', ')" }
-if (-not $KeepFonts)  { Write-Host '  - the per-user JetBrainsMono Nerd Font' }
+$recordedTools = @(Get-ManifestEntries 'winget')
+$toolsToRemove = if ($AllTools) { @($WingetTools) } else { $recordedTools }
+$recordedFonts = @(Get-ManifestEntries 'font')
+if (-not $KeepTools) {
+    $list = if ($toolsToRemove) { $toolsToRemove -join ', ' } else { 'none recorded' }
+    Write-Host "  - winget packages install.ps1 installed: $list"
+}
+if (-not $KeepFonts)  { Write-Host "  - JetBrainsMono Nerd Font files install.ps1 added: $($recordedFonts.Count)" }
 if ($Purge)           { Write-Host "  - zoxide's database and the oh-my-posh cache" }
 if (-not $Yes) {
     $answer = Read-Host 'Continue? [y/N]'
@@ -122,8 +146,10 @@ foreach ($file in 'terminal-customization.nu', 'zoxide.nu', 'fzf.nu') {
 }
 Remove-IfExists (Join-Path $nuDataDir 'vendor\autoload\oh-my-posh.nu')
 
-if (Test-Command bat) {
-    $theme = Join-Path (Get-NativeOutput { bat --config-dir }) 'themes\Microverse.tmTheme'
+$batDir = if (Test-Command bat) { Get-NativeOutput { bat --config-dir } } else { '' }
+# Only a real bat prints an absolute config directory.
+if ($batDir -and [IO.Path]::IsPathRooted($batDir)) {
+    $theme = Join-Path $batDir 'themes\Microverse.tmTheme'
     if (Test-Path $theme) {
         Remove-Item $theme -Force
         Invoke-Quiet { bat cache --build } | Out-Null
@@ -152,36 +178,37 @@ foreach ($settings in $settingsFiles) {
 
 # --- fonts (before the tools, so nothing is holding them) -------------------------------------
 if (-not $KeepFonts) {
-    Write-Step 'Removing JetBrainsMono Nerd Font (per-user)'
-    $fontDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+    Write-Step 'Removing JetBrainsMono Nerd Font files installed by install.ps1'
     $fontKey = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts'
+    foreach ($name in Get-ManifestEntries 'fontreg') {
+        Remove-ItemProperty -Path $fontKey -Name $name -ErrorAction SilentlyContinue
+    }
     $removed = 0
-    if (Test-Path $fontKey) {
-        $values = Get-ItemProperty $fontKey
-        foreach ($property in $values.PSObject.Properties) {
-            if ($property.Value -is [string] -and $property.Value -match 'JetBrainsMono.*NerdFont') {
-                Remove-ItemProperty -Path $fontKey -Name $property.Name -ErrorAction SilentlyContinue
-            }
-        }
+    $inUse = $false
+    foreach ($file in $recordedFonts) {
+        if (-not (Test-Path $file)) { continue }
+        try { Remove-Item $file -Force; $removed++ }
+        catch { $inUse = $true; Write-Warn "$(Split-Path $file -Leaf) is in use; close all terminals and delete it, or it goes after a reboot" }
     }
-    foreach ($font in Get-ChildItem $fontDir -Filter 'JetBrainsMono*NerdFont*' -ErrorAction SilentlyContinue) {
-        try { Remove-Item $font.FullName -Force; $removed++ }
-        catch { Write-Warn "$($font.Name) is in use; it will disappear after closing all terminals and deleting it, or after a reboot" }
-    }
-    Write-Ok "$removed font file(s) removed - switch other terminals (VS Code, ...) to another font"
-    Write-Host '  Fonts installed for all users (C:\Windows\Fonts) are left alone.' -ForegroundColor DarkGray
+    Remove-ManifestEntries 'fontreg'
+    if (-not $inUse) { Remove-ManifestEntries 'font' }
+    if ($recordedFonts) { Write-Ok "$removed font file(s) removed - switch other terminals (VS Code, ...) to another font" }
+    else { Write-Ok 'no font files recorded by install.ps1 (a font you installed yourself is left alone)' }
 }
 
 # --- tools ------------------------------------------------------------------------------------
 if (-not $KeepTools) {
-    Write-Step 'Uninstalling tools with winget'
-    if (Test-Command winget) {
-        foreach ($id in $WingetTools) {
+    Write-Step 'Uninstalling the tools install.ps1 installed'
+    if (-not $toolsToRemove) {
+        Write-Ok 'no winget packages recorded by install.ps1 (tools you already had are left alone; -AllTools removes them anyway)'
+    } elseif (Test-Command winget) {
+        foreach ($id in $toolsToRemove) {
             $code = Invoke-Quiet { winget uninstall --id $id --exact --silent --disable-interactivity --accept-source-agreements }
             if ($code -eq 0) { Write-Ok $id }
             elseif ($code -eq -1978335212) { Write-Ok "$id (not installed)" }
             else { Write-Warn "$id could not be uninstalled (winget exit code $code)" }
         }
+        Remove-ManifestEntries 'winget'
     } else {
         Write-Warn 'winget not found; uninstall the tools from Settings > Apps'
     }
@@ -189,6 +216,8 @@ if (-not $KeepTools) {
 
 # --- files ------------------------------------------------------------------------------------
 if (-not $KeepConfig) { Remove-IfExists $TcHome }
+# Forget the install record once nothing in it is left.
+if ((Test-Path $StateDir) -and -not (Test-Path $Manifest)) { Remove-Item $StateDir -Recurse -Force -ErrorAction SilentlyContinue }
 if ($Purge) {
     Remove-IfExists (Join-Path $env:LOCALAPPDATA 'zoxide')
     Remove-IfExists (Join-Path $env:LOCALAPPDATA 'oh-my-posh')

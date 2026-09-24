@@ -16,9 +16,9 @@ status (green, red when the last command failed), then `➜` on a new line.
 | | Command |
 |-|---------|
 | Windows | `winget install JanDeDobbeleer.OhMyPosh --source winget` |
-| Linux | `curl -s https://ohmyposh.dev/install.sh \| bash -s -- -d ~/.local/bin` |
+| Linux | download `posh-linux-amd64` (or `-arm64`) from the [latest release](https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest), check its SHA-256 (`sha256sum -c`), and install it as `~/.local/bin/oh-my-posh` (`install.sh` does this) |
 
-Upgrade: `winget upgrade JanDeDobbeleer.OhMyPosh` / run the Linux command again (or `oh-my-posh upgrade`).
+Upgrade: `winget upgrade JanDeDobbeleer.OhMyPosh` / `oh-my-posh upgrade` or `upgrade.sh` on Linux.
 
 ## Enable it in a shell
 

@@ -3,13 +3,15 @@
     TerminalCustumization - one-click installer for Windows.
 
 .DESCRIPTION
-    Installs (or upgrades to the latest version) with winget:
+    Installs what is missing (and upgrades what winget manages) of:
       Windows Terminal, PowerShell 7, Oh My Posh, Nushell, eza, bat, ripgrep, fzf,
       zoxide, duf, dust and the GitHub CLI.
-    Then installs the latest JetBrainsMono Nerd Font, copies the configuration to
+    Then installs the JetBrainsMono Nerd Font if it is missing, copies the configuration to
     ~/.config/terminal-customization, wires up PowerShell 7, Windows PowerShell 5.1
     and Nushell, adds a "Nushell (Microverse)" Windows Terminal profile and makes it
-    the default. Re-running the script upgrades everything.
+    the default on a first install. Re-running the script only adds what is missing.
+    What it installs is recorded in %LOCALAPPDATA%\terminal-customization\manifest.txt,
+    so uninstall.ps1 removes only that.
 
 .EXAMPLE
     irm https://raw.githubusercontent.com/R3start/TerminalCustumization/main/install.ps1 | iex
@@ -34,8 +36,11 @@ param(
     [switch]$NoDefaultShell,
     # Make Nushell the default Windows Terminal profile again (re-runs keep your current choice)
     [switch]$DefaultShell,
-    # Keep PSReadLine/Terminal-Icons modules installed from the PowerShell Gallery
-    [switch]$KeepOldModules
+    # Uninstall the PSReadLine/Terminal-Icons copies from the PowerShell Gallery that the previous
+    # version of this setup told you to install (they are only reported otherwise)
+    [switch]$RemoveOldModules,
+    # Never change the PowerShell execution policy (only report when it blocks the profile)
+    [switch]$KeepExecutionPolicy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +51,10 @@ $TcHome = Join-Path $HOME '.config\terminal-customization'
 $MarkBegin = '# >>> terminal-customization >>>'
 $MarkEnd = '# <<< terminal-customization <<<'
 $WtProfileName = 'Nushell (Microverse)'
+$StateDir = Join-Path $env:LOCALAPPDATA 'terminal-customization'
+$Manifest = Join-Path $StateDir 'manifest.txt'
+$UserFontDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+$UserFontKey = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts'
 
 # winget package id -> command it provides
 $Packages = [ordered]@{
@@ -66,6 +75,7 @@ $Packages = [ordered]@{
 $ConfigFiles = @(
     'oh-my-posh/microverse-power.omp.json'
     'powershell/profile.ps1'
+    'powershell/disable-duplicates.ps1'
     'nushell/terminal-customization.nu'
     'nushell/config-snippet.nu'
     'bat/themes/Microverse.tmTheme'
@@ -96,6 +106,8 @@ function Update-SessionPath {
     $env:Path = (@($machine, $user, $links) | Where-Object { $_ }) -join ';'
 }
 
+# WriteAllText writes into the existing file, so a symlinked profile keeps its link and the file
+# keeps its permissions (ACL).
 function Write-Utf8File([string]$Path, [string]$Content) {
     $dir = Split-Path $Path -Parent
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -117,27 +129,73 @@ function Update-FileIfChanged([string]$Path, [string]$Content) {
     return $true
 }
 
-# Disables lines outside the marked block that would load a tool a second time (lines added by
-# hand, by the old README or by other installers). They are kept as comments; the file is backed up.
-function Disable-DuplicateLines([string]$Path, [string]$Pattern) {
+# --- install manifest: what this script installed (read by uninstall.ps1) ---------------
+# Lines: <kind><TAB><value>   kinds: winget (package id), font (file), fontreg (HKCU value name)
+function Add-ManifestEntry([string]$Kind, [string]$Value) {
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    $line = "$Kind`t$Value"
+    $existing = if (Test-Path $Manifest) { @(Get-Content $Manifest) } else { @() }
+    if ($existing -notcontains $line) { Add-Content -Path $Manifest -Value $line -Encoding UTF8 }
+}
+
+function Get-ManifestEntries([string]$Kind) {
+    if (-not (Test-Path $Manifest)) { return @() }
+    @(Get-Content $Manifest | Where-Object { $_ -like "$Kind`t*" } | ForEach-Object { $_.Substring($Kind.Length + 1) })
+}
+
+# Per-user JetBrainsMono Nerd Font files and their HKCU registry values.
+function Get-FontSnapshot {
+    $files = @(Get-ChildItem $UserFontDir -Filter 'JetBrainsMono*NerdFont*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $values = @()
+    if (Test-Path $UserFontKey) {
+        $values = @((Get-ItemProperty $UserFontKey).PSObject.Properties |
+            Where-Object { $_.Value -is [string] -and $_.Value -match 'JetBrainsMono.*NerdFont' } | ForEach-Object { $_.Name })
+    }
+    @{ Files = $files; Values = $values }
+}
+
+# Disables statements outside the marked block of Nushell's config.nu that would load a tool a
+# second time. They stay as comments and the file is backed up. A matching line whose brackets
+# don't balance (part of a longer statement) is left alone and reported instead.
+function Disable-DuplicateNuLines([string]$Path, [string]$Pattern) {
     if (-not (Test-Path $Path)) { return }
     $text = [IO.File]::ReadAllText($Path)
     $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
     $inBlock = $false
     $count = 0
+    $skipped = @()
+    $number = 0
     $lines = foreach ($line in ($text -split '\r?\n')) {
+        $number++
         if ($line -eq $MarkBegin) { $inBlock = $true }
+        $result = $line
         if (-not $inBlock -and $line -match $Pattern -and $line -notmatch '^\s*#') {
-            $count++
-            "# disabled by terminal-customization: $line"
-        } else {
-            $line
+            $unquoted = [regex]::Replace($line, '"[^"]*"|''[^'']*''', '')
+            if (([regex]::Matches($unquoted, '[({\[]')).Count -eq ([regex]::Matches($unquoted, '[)}\]]')).Count) {
+                $count++
+                $result = "# disabled by terminal-customization: $line"
+            } else {
+                $skipped += $number
+            }
         }
         if ($line -eq $MarkEnd) { $inBlock = $false }
+        $result
     }
     if ($count -gt 0) {
         [void](Update-FileIfChanged $Path ($lines -join $newline))
         Write-Warn "${Path}: disabled $count line(s) that would load a tool twice (kept as comments, backup saved)"
+    }
+    if ($skipped) { Write-Warn "${Path}: line(s) $($skipped -join ', ') also load a tool, but are part of a longer statement - remove them by hand" }
+}
+
+# Runs config/powershell/disable-duplicates.ps1 (PowerShell parser based) on a profile. It is run
+# as a script block, so it works whatever the execution policy is.
+function Disable-DuplicateProfileStatements([string]$Path) {
+    if (-not (Test-Path $Path)) { return }
+    $helper = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $TcHome 'powershell\disable-duplicates.ps1')))
+    foreach ($message in (& $helper -Path $Path)) {
+        if ($message -like 'disabled *') { Write-Warn "${Path}: $message statement(s) that would load a tool twice (kept as comments, backup saved)" }
+        else { Write-Warn "${Path}: $message" }
     }
 }
 
@@ -190,7 +248,9 @@ if (-not $SkipTools) {
         } else {
             $code = Invoke-Quiet { winget install --id $id --exact --source winget --silent `
                 --accept-package-agreements --accept-source-agreements --disable-interactivity }
-            if ($code -eq 0 -or $upToDateCodes -contains $code) { Write-Ok "$id installed" }
+            # Recorded, so uninstall.ps1 removes only packages this script installed.
+            if ($code -eq 0) { Add-ManifestEntry 'winget' $id; Write-Ok "$id installed" }
+            elseif ($upToDateCodes -contains $code) { Write-Ok "$id installed" }
             else { Write-Warn "$id failed (winget exit code $code)"; $failed += $id }
         }
     }
@@ -202,12 +262,23 @@ Update-SessionPath
 # --- 2. font ------------------------------------------------------------------------
 if (-not $SkipFonts) {
     Write-Step 'Installing JetBrainsMono Nerd Font (latest release)'
+    $ourFonts = @(Get-ManifestEntries 'font')
     if (-not $UpdateFonts -and (Test-NerdFontInstalled)) {
         Write-Ok 'JetBrainsMono Nerd Font already installed (upgrade.ps1 or -UpdateFonts refreshes it)'
+    } elseif ((Test-NerdFontInstalled) -and $ourFonts.Count -eq 0) {
+        Write-Ok 'JetBrainsMono Nerd Font is installed, but not by this script - left as it is'
     } elseif (Test-Command oh-my-posh) {
+        $before = Get-FontSnapshot
         oh-my-posh font install JetBrainsMono
-        if ($LASTEXITCODE -eq 0) { Write-Ok 'JetBrainsMono Nerd Font installed' }
-        else { Write-Warn 'Font installation failed, see README "Fonts" for the manual steps' }
+        if ($LASTEXITCODE -eq 0) {
+            # Record only what this run added; a font you installed yourself is never recorded.
+            $after = Get-FontSnapshot
+            $after.Files | Where-Object { $before.Files -notcontains $_ } | ForEach-Object { Add-ManifestEntry 'font' $_ }
+            $after.Values | Where-Object { $before.Values -notcontains $_ } | ForEach-Object { Add-ManifestEntry 'fontreg' $_ }
+            Write-Ok 'JetBrainsMono Nerd Font installed'
+        } else {
+            Write-Warn 'Font installation failed, see README "Fonts" for the manual steps'
+        }
     } else {
         Write-Warn 'oh-my-posh not found, skipping font installation'
     }
@@ -241,42 +312,67 @@ $MarkBegin
 . "`$HOME\.config\terminal-customization\powershell\profile.ps1"
 $MarkEnd
 "@
-# Lines from the previous version of this repo (PSReadLine, Terminal-Icons, oh-my-posh), other zoxide
-# init lines and hand-added copies of the line below would load things twice.
-$duplicatePattern = 'oh-my-posh(\.exe)?\s+init|zoxide(\.exe)?\s+init|Import-Module\s+(-Name\s+)?(Terminal-Icons|PSReadLine)|Set-PSReadLineOption|terminal-customization[\\/]powershell[\\/]profile\.ps1'
+# Statements from the previous version of this repo (PSReadLine, Terminal-Icons, oh-my-posh), other
+# zoxide init lines and hand-added copies of the line below would load things twice.
 foreach ($edition in 'PowerShell', 'WindowsPowerShell') {
     $dir = Join-Path $documents $edition
     foreach ($name in 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1', 'profile.ps1') {
-        Disable-DuplicateLines (Join-Path $dir $name) $duplicatePattern
+        Disable-DuplicateProfileStatements (Join-Path $dir $name)
     }
     Set-MarkedBlock (Join-Path $dir 'profile.ps1') $profileBlock
     Write-Ok "$edition profile: $(Join-Path $dir 'profile.ps1')"
 }
 
-# Profiles are local scripts; make sure the current user may run them.
-try {
-    $policy = Get-ExecutionPolicy -Scope CurrentUser
-    if ($policy -in 'Undefined', 'Restricted', 'AllSigned' -and (Get-ExecutionPolicy) -in 'Restricted', 'AllSigned') {
-        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        Write-Ok 'execution policy for the current user set to RemoteSigned'
+# Profiles are local scripts. The only policy this script changes is the untouched Windows client
+# default (Restricted, nothing set in any scope) for Windows PowerShell 5.1, and only to
+# RemoteSigned for the current user. A policy that you or an administrator set (AllSigned,
+# Restricted, group policy, ...) is never changed - you only get told that it blocks the profile.
+$policyCheck = @'
+$set = Get-ExecutionPolicy -List | Where-Object { $_.Scope -ne 'Process' -and $_.ExecutionPolicy -ne 'Undefined' } | Select-Object -First 1
+if ($set) { "$($set.Scope)=$($set.ExecutionPolicy)" } else { 'default' }
+'@
+$isClientWindows = try { (Get-CimInstance Win32_OperatingSystem).ProductType -eq 1 } catch { $true }
+foreach ($shell in 'powershell', 'pwsh') {
+    if (-not (Test-Command $shell)) { continue }
+    $ErrorActionPreference = 'Continue'
+    $state = ((& $shell -NoLogo -NoProfile -NonInteractive -Command $policyCheck 2>$null) | Out-String).Trim()
+    $ErrorActionPreference = 'Stop'
+    $effective = if ($state -eq 'default') {
+        if ($shell -eq 'powershell' -and $isClientWindows) { 'Restricted' } else { 'RemoteSigned' }
+    } else { ($state -split '=')[-1] }
+    if ($effective -notin 'Restricted', 'AllSigned') { continue }
+    if ($state -eq 'default' -and -not $KeepExecutionPolicy) {
+        Invoke-Quiet { & $shell -NoLogo -NoProfile -NonInteractive -Command 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' } | Out-Null
+        Write-Ok "${shell}: execution policy for the current user set to RemoteSigned (was the Windows default, Restricted)"
+    } else {
+        $where = if ($state -eq 'default') { 'Windows default' } else { $state }
+        Write-Warn "${shell}: execution policy is $effective ($where), so the profile will not load. If that is OK for you: Set-ExecutionPolicy RemoteSigned -Scope CurrentUser (or sign the profile scripts)."
     }
-} catch {
-    Write-Warn "Could not set the execution policy: $($_.Exception.Message)"
 }
 
-# Remove modules the old setup installed from the PowerShell Gallery (PSReadLine prerelease, Terminal-Icons).
-# The PSReadLine copy bundled with PowerShell itself cannot be removed and is simply no longer configured.
-if (-not $KeepOldModules) {
-    $uninstall = "foreach (`$m in 'PSReadLine','Terminal-Icons') { Get-InstalledModule `$m -AllVersions -ErrorAction SilentlyContinue | Uninstall-Module -Force -ErrorAction SilentlyContinue }"
-    foreach ($shell in 'powershell', 'pwsh') {
-        if (Test-Command $shell) { Invoke-Quiet { & $shell -NoLogo -NoProfile -NonInteractive -Command $uninstall } | Out-Null }
+# PSReadLine prerelease / Terminal-Icons from the PowerShell Gallery (installed for the previous
+# version of this setup) are no longer used. They are only removed when you ask (-RemoveOldModules).
+$moduleCheck = "Get-InstalledModule PSReadLine, Terminal-Icons -ErrorAction SilentlyContinue | ForEach-Object { `$_.Name + ' ' + `$_.Version }"
+$moduleRemove = "foreach (`$m in 'PSReadLine','Terminal-Icons') { Get-InstalledModule `$m -AllVersions -ErrorAction SilentlyContinue | Uninstall-Module -Force -ErrorAction SilentlyContinue }"
+foreach ($shell in 'powershell', 'pwsh') {
+    if (-not (Test-Command $shell)) { continue }
+    $ErrorActionPreference = 'Continue'
+    $found = @(& $shell -NoLogo -NoProfile -NonInteractive -Command $moduleCheck 2>$null)
+    $ErrorActionPreference = 'Stop'
+    if (-not $found) { continue }
+    if ($RemoveOldModules) {
+        Invoke-Quiet { & $shell -NoLogo -NoProfile -NonInteractive -Command $moduleRemove } | Out-Null
+        Write-Ok "${shell}: removed $($found -join ', ') from the PowerShell Gallery installs (-RemoveOldModules)"
+    } else {
+        Write-Warn "${shell}: $($found -join ', ') from the PowerShell Gallery are no longer used by this setup. Remove them with -RemoveOldModules or: Uninstall-Module PSReadLine, Terminal-Icons -AllVersions"
     }
-    Write-Ok 'old PSReadLine / Terminal-Icons gallery modules removed (if they were installed)'
 }
 
 # --- 5. bat theme --------------------------------------------------------------------------
-if (Test-Command bat) {
-    $batThemes = Join-Path (bat --config-dir) 'themes'
+$batDir = if (Test-Command bat) { ((bat --config-dir 2>$null) | Out-String).Trim() } else { '' }
+# Only a real bat prints an absolute config directory.
+if ($batDir -and [IO.Path]::IsPathRooted($batDir)) {
+    $batThemes = Join-Path $batDir 'themes'
     New-Item -ItemType Directory -Path $batThemes -Force | Out-Null
     $theme = Join-Path $TcHome 'bat/themes/Microverse.tmTheme'
     $installedTheme = Join-Path $batThemes 'Microverse.tmTheme'
@@ -297,7 +393,7 @@ if (Test-Command nu) {
     $autoload = Join-Path $nuConfigDir 'autoload'
     New-Item -ItemType Directory -Path $autoload -Force | Out-Null
     Copy-Item (Join-Path $TcHome 'nushell/terminal-customization.nu') $autoload -Force
-    Disable-DuplicateLines $nuConfig 'oh-my-posh(\.exe)?\s+init\s+nu|zoxide(\.exe)?\s+init\s+nushell|fzf(\.exe)?\s+--nushell|source\s+.*\.zoxide\.nu|source\s+.*oh-my-posh\.nu'
+    Disable-DuplicateNuLines $nuConfig 'oh-my-posh(\.exe)?\s+init\s+nu|zoxide(\.exe)?\s+init\s+nushell|fzf(\.exe)?\s+--nushell|source\s+.*\.zoxide\.nu|source\s+.*oh-my-posh\.nu'
     Set-MarkedBlock $nuConfig ([IO.File]::ReadAllText((Join-Path $TcHome 'nushell/config-snippet.nu')))
     # Generate the integration scripts once now; config.nu refreshes them on every start.
     if (Test-Command zoxide) { Write-Utf8File (Join-Path $autoload 'zoxide.nu') ((zoxide init nushell) -join "`n") }

@@ -5,8 +5,10 @@
 #   ./uninstall.sh [options]
 #   curl -fsSL https://raw.githubusercontent.com/R3start/TerminalCustumization/main/uninstall.sh | bash -s -- --yes
 #
-# Reverses install.sh: removes the shell configuration blocks, the configuration folder, the tools in
-# ~/.local/bin and the JetBrainsMono Nerd Font. Every edited file is backed up first (*.tc-backup-<date>).
+# Reverses install.sh: removes the shell configuration blocks and the configuration folder, plus the
+# tools and font files that install.sh recorded as installed by it
+# (~/.local/state/terminal-customization/manifest). Anything you installed yourself is left alone.
+# Every edited file is backed up first (*.tc-backup-<date>).
 
 set -euo pipefail
 
@@ -14,18 +16,22 @@ set -euo pipefail
 {
 BIN_DIR="${TC_BIN_DIR:-$HOME/.local/bin}"
 TC_HOME="${TC_HOME:-$HOME/.config/terminal-customization}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/terminal-customization"
+MANIFEST="$STATE_DIR/manifest"
 MARK_BEGIN='# >>> terminal-customization >>>'
 MARK_END='# <<< terminal-customization <<<'
 TOOL_BINS=(oh-my-posh nu eza bat rg fzf zoxide duf dust gh)
 
-KEEP_TOOLS=0 KEEP_FONTS=0 KEEP_CONFIG=0 PURGE=0 YES=0 GNOME_THEME=0
+KEEP_TOOLS=0 KEEP_FONTS=0 KEEP_CONFIG=0 PURGE=0 YES=0 GNOME_THEME=0 ALL_TOOLS=0
 
 usage() {
   cat <<EOF
 Usage: uninstall.sh [options]
 
-  --keep-tools      keep the tools in $BIN_DIR
-  --keep-fonts      keep the JetBrainsMono Nerd Font
+  --keep-tools      keep the tools install.sh put in $BIN_DIR
+  --keep-fonts      keep the JetBrainsMono Nerd Font files install.sh added
+  --all-tools       also remove ${TOOL_BINS[*]} and nu_plugin_* from $BIN_DIR when
+                    they are not in the install record (installs made before it existed)
   --keep-config     keep $TC_HOME (shell integration is still removed)
   --gnome-terminal  reset the font/colours that install.sh --gnome-terminal set
   --purge           also delete tool data: zoxide's directory database and the oh-my-posh cache
@@ -38,6 +44,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-tools) KEEP_TOOLS=1 ;;
     --keep-fonts) KEEP_FONTS=1 ;;
+    --all-tools) ALL_TOOLS=1 ;;
     --keep-config) KEEP_CONFIG=1 ;;
     --gnome-terminal) GNOME_THEME=1 ;;
     --purge) PURGE=1 ;;
@@ -55,18 +62,33 @@ warn() { printf '  %s!%s %s\n' "$C_Y" "$C_0" "$*" >&2; }
 die()  { printf '%sError:%s %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
 has()  { command -v "$1" >/dev/null 2>&1; }
 
-backup() { [[ -s "$1" ]] && cp "$1" "$1.tc-backup-$(date +%Y%m%d%H%M%S)"; return 0; }
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Removes the marked block (and the blank lines before it) from <file>.
+if has sha256sum; then SHA256=(sha256sum); else SHA256=(shasum -a 256); fi
+
+# Backups keep the original's permissions (cp -p).
+backup() { [[ -s "$1" ]] && cp -p "$1" "$1.tc-backup-$(date +%Y%m%d%H%M%S)"; return 0; }
+
+# Removes the marked block (and the blank lines before it) from <file>. The file is rewritten in
+# place, so a symlink keeps pointing to its target and the file keeps its permissions.
 remove_block() {
-  local file=$1 new="$1.tc-tmp"
+  local file=$1 new="$TMP_DIR/block.new"
   [[ -f "$file" ]] && grep -qF "$MARK_BEGIN" "$file" || return 1
   awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
     $0==b {skip=1; blank=""; next} $0==e {skip=0; next} skip {next}
     /^[[:space:]]*$/ {blank=blank $0 "\n"; next}
     {printf "%s%s\n", blank, $0; blank=""}' "$file" > "$new"
   backup "$file"
-  mv "$new" "$file"
+  cat "$new" > "$file"
+}
+
+# Entries of the install record: manifest_list <kind> prints "<path><TAB><extra>" lines.
+manifest_list() { [[ -f "$MANIFEST" ]] && awk -F '\t' -v k="$1" '$1 == k { print $2 "\t" $3 }' "$MANIFEST"; return 0; }
+manifest_drop() {
+  [[ -f "$MANIFEST" ]] || return 0
+  awk -F '\t' -v k="$1" '$1 != k' "$MANIFEST" > "$TMP_DIR/manifest"
+  cat "$TMP_DIR/manifest" > "$MANIFEST"
 }
 
 confirm() {
@@ -87,8 +109,15 @@ echo "This will remove the TerminalCustumization setup:"
 echo "  - the terminal-customization blocks in ~/.bashrc, Nushell's config.nu and the PowerShell profile"
 echo "  - the Nushell autoload scripts and the bat 'Microverse' theme"
 [[ $KEEP_CONFIG == 0 ]] && echo "  - $TC_HOME"
-[[ $KEEP_TOOLS == 0 ]] && echo "  - tools in $BIN_DIR: ${TOOL_BINS[*]} nu_plugin_*"
-[[ $KEEP_FONTS == 0 ]] && echo "  - JetBrainsMono Nerd Font files in ~/.local/share/fonts"
+if [[ $KEEP_TOOLS == 0 ]]; then
+  recorded=$(manifest_list bin | cut -f1 | xargs -r -n1 basename | tr '\n' ' ')
+  echo "  - tools install.sh installed: ${recorded:-none recorded}"
+  [[ -n "$(manifest_list replaced)" ]] && echo "  - and restore the files install.sh --force replaced"
+  [[ $ALL_TOOLS == 1 ]] && echo "  - plus any ${TOOL_BINS[*]} nu_plugin_* left in $BIN_DIR (--all-tools)"
+fi
+if [[ $KEEP_FONTS == 0 ]]; then
+  echo "  - JetBrainsMono Nerd Font files install.sh added: $(manifest_list font | grep -c . || true)"
+fi
 [[ $GNOME_THEME == 1 ]] && echo "  - font/colour settings of the default GNOME Terminal profile (reset to defaults)"
 [[ $PURGE == 1 ]] && echo "  - zoxide's database and the oh-my-posh cache"
 confirm
@@ -118,8 +147,9 @@ if has pwsh; then
   if remove_block "$profile_path"; then ok "$profile_path"; fi
 fi
 
-if has bat; then
-  theme="$(bat --config-dir)/themes/Microverse.tmTheme"
+bat_dir=$(has bat && bat --config-dir 2>/dev/null) || bat_dir=''
+if [[ "$bat_dir" == /* ]]; then
+  theme="$bat_dir/themes/Microverse.tmTheme"
   if [[ -f "$theme" ]]; then
     rm -f "$theme"
     bat cache --build >/dev/null 2>&1 || true
@@ -141,31 +171,56 @@ fi
 
 # --- tools / fonts / files -------------------------------------------------------------
 if [[ $KEEP_TOOLS == 0 ]]; then
-  step "Removing tools from $BIN_DIR"
-  for bin in "${TOOL_BINS[@]}"; do
-    [[ -f "$BIN_DIR/$bin" ]] && rm -f "$BIN_DIR/$bin" && ok "$bin"
-  done
-  for f in "$BIN_DIR"/nu_plugin_*; do
-    [[ -f "$f" ]] && rm -f "$f"
-  done
+  step "Removing tools installed by install.sh"
+  while IFS=$'\t' read -r path sum; do
+    [[ -n "$path" ]] || continue
+    if [[ ! -e "$path" ]]; then continue; fi
+    if [[ -n "$sum" && "$("${SHA256[@]}" "$path" | awk '{ print $1 }')" != "$sum" ]]; then
+      warn "$path changed since install.sh installed it - left alone"
+      continue
+    fi
+    rm -f "$path" && ok "removed $path"
+  done < <(manifest_list bin)
+  # Put back files that install.sh --force replaced.
+  while IFS=$'\t' read -r path saved; do
+    [[ -n "$path" ]] || continue
+    [[ -e "$saved" || -L "$saved" ]] || continue
+    if [[ -e "$path" || -L "$path" ]]; then warn "$path exists again - your original stays at $saved"; continue; fi
+    mv "$saved" "$path" && ok "restored your original $path"
+  done < <(manifest_list replaced)
+  manifest_drop bin
+  manifest_drop replaced
+  if [[ $ALL_TOOLS == 1 ]]; then
+    for f in "${TOOL_BINS[@]/#/$BIN_DIR/}" "$BIN_DIR"/nu_plugin_*; do
+      [[ -e "$f" || -L "$f" ]] && rm -f "$f" && ok "removed $f (--all-tools)"
+    done
+  fi
   hash -r
   left=()
   for bin in "${TOOL_BINS[@]}"; do has "$bin" && left+=("$bin"); done
-  [[ ${#left[@]} -eq 0 ]] || warn "still on PATH (installed another way, e.g. apt/winget/brew): ${left[*]}"
+  [[ ${#left[@]} -eq 0 ]] || warn "still on PATH (not installed by install.sh, so left alone): ${left[*]}"
 fi
 
 if [[ $KEEP_FONTS == 0 ]]; then
-  step "Removing JetBrainsMono Nerd Font"
-  shopt -s nullglob
-  fonts=("$HOME"/.local/share/fonts/JetBrainsMono*NerdFont*)
-  shopt -u nullglob
-  if [[ ${#fonts[@]} -gt 0 ]]; then
-    rm -f "${fonts[@]}"
+  step "Removing JetBrainsMono Nerd Font files installed by install.sh"
+  removed=0
+  while IFS=$'\t' read -r path _; do
+    [[ -n "$path" && -f "$path" ]] || continue
+    rm -f "$path" && removed=$((removed + 1))
+  done < <(manifest_list font)
+  manifest_drop font
+  if [[ $removed -gt 0 ]]; then
     has fc-cache && fc-cache -f >/dev/null 2>&1 || true
-    ok "${#fonts[@]} font files removed - switch your terminal to another font"
+    ok "$removed font file(s) removed - switch your terminal to another font"
   else
-    ok "no user-installed JetBrainsMono Nerd Font files found (system-wide fonts in /usr/share/fonts are left alone)"
+    ok "no font files recorded by install.sh (a font you installed yourself is left alone)"
   fi
+fi
+
+# Forget the install record once nothing in it is left.
+if [[ -f "$MANIFEST" && ! -s "$MANIFEST" ]]; then
+  rm -f "$MANIFEST"
+  rmdir "$STATE_DIR/replaced" "$STATE_DIR" 2>/dev/null || true
 fi
 
 if [[ $KEEP_CONFIG == 0 && -d "$TC_HOME" ]]; then
