@@ -43,7 +43,7 @@ function Get-ToolVersions {
 
 $before = Get-ToolVersions
 
-$installArgs = @{}
+$installArgs = @{ UpdateFonts = $true }
 foreach ($name in 'SkipTools', 'SkipFonts', 'SkipConfig') {
     if ($PSBoundParameters.ContainsKey($name)) { $installArgs[$name] = $PSBoundParameters[$name] }
 }

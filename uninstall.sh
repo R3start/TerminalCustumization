@@ -96,7 +96,7 @@ confirm
 # --- shells -----------------------------------------------------------------------------
 step "Removing shell integration"
 if remove_block "$HOME/.bashrc"; then ok "$HOME/.bashrc"; fi
-if [[ -f "$HOME/.bashrc" ]] && grep -q '^# disabled by terminal-customization: ' "$HOME/.bashrc"; then
+if [[ -f "$HOME/.bashrc" ]] && grep -q 'disabled by terminal-customization: ' "$HOME/.bashrc"; then
   warn "$HOME/.bashrc still has lines commented out by the installer ('# disabled by terminal-customization:'); restore them by hand if you want them back"
 fi
 

@@ -66,10 +66,21 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 
 ## One-click install
 
-The installers are safe to run again. Each run installs the **latest release** of every tool
-(see [Upgrading](#upgrading) for the dedicated upgrade scripts). Your own configuration files are never overwritten:
-a marked block (`# >>> terminal-customization >>>`) is added to them, and a `*.tc-backup-<date>` copy is
-kept whenever a file actually changes. Re-runs keep your choice of default shell.
+The installers are safe to run again. A second run only adds what is **missing** and never duplicates anything:
+
+- **Tools:** a tool that is already at the latest version is skipped, wherever it is installed. An outdated
+  one is upgraded. On Windows, winget-managed packages are upgraded in place, and a tool installed some other
+  way (scoop, choco, by hand) is left alone instead of being installed a second time.
+- **Font:** it is only installed when missing. The [upgrade scripts](#upgrading) refresh it
+  (`--update-fonts` / `-UpdateFonts`).
+- **Shell configuration:** your files are never overwritten. Exactly one marked block
+  (`# >>> terminal-customization >>>`) is added, and it is replaced in place on later runs. Lines elsewhere in
+  the file that would load a tool a second time are disabled (kept as comments) and the file is backed up. For
+  example: the old README's `oh-my-posh init` line, `zoxide init` / `fzf --bash` lines, PSReadLine/Terminal-Icons
+  imports, or a hand-added copy of the source line. In bash they become `: # disabled by terminal-customization: …`,
+  which stays valid inside an `if … fi`.
+- **Backups:** a `*.tc-backup-<date>` copy is kept only when a file actually changes.
+- **Default shell:** your choice is kept.
 
 ### Windows 10/11
 
@@ -87,19 +98,20 @@ Options (from a clone, or with `& ([scriptblock]::Create((irm <url>))) -Option`)
 |--------|--------|
 | `-SkipTools` | don't install/upgrade anything with winget |
 | `-SkipFonts` | don't install the Nerd Font |
+| `-UpdateFonts` | reinstall the font even if it is already installed |
 | `-SkipConfig` | only install tools and font |
 | `-NoDefaultShell` | first install: keep your current default Windows Terminal profile |
 | `-DefaultShell` | make **Nushell (Microverse)** the default profile again (re-runs don't touch it otherwise) |
 | `-KeepOldModules` | don't remove PSReadLine/Terminal-Icons installed from the PowerShell Gallery |
 
 What it does:
-1. Uses `winget install` to install or upgrade Windows Terminal, PowerShell 7, Oh My Posh, Nushell, eza, bat,
-   ripgrep, fzf, zoxide, duf, dust and gh.
-2. Runs `oh-my-posh font install JetBrainsMono`.
+1. Installs the missing ones of Windows Terminal, PowerShell 7, Oh My Posh, Nushell, eza, bat, ripgrep, fzf,
+   zoxide, duf, dust and gh with `winget install`. Packages winget already manages get `winget upgrade`.
+2. Runs `oh-my-posh font install JetBrainsMono` if the font isn't installed yet.
 3. Copies `config/` to `%USERPROFILE%\.config\terminal-customization`.
 4. Adds one line to `Documents\PowerShell\profile.ps1` and `Documents\WindowsPowerShell\profile.ps1`.
-   Those profiles apply to all hosts, including the VS Code terminal. It also comments out old
-   PSReadLine/Terminal-Icons lines.
+   Those profiles apply to all hosts, including the VS Code terminal. It also disables old
+   PSReadLine/Terminal-Icons/oh-my-posh/zoxide lines in all profile files.
 5. Configures Nushell and the bat theme.
 6. Adds a **Nushell (Microverse)** Windows Terminal profile with the Microverse colour scheme and the Nerd Font,
    and makes it the default profile (first install only, or with `-DefaultShell`).
@@ -118,21 +130,22 @@ Or from a clone: `./install.sh`. Pass options with `curl … | bash -s -- --opti
 |--------|--------|
 | `--skip-tools` | don't download the tools |
 | `--skip-fonts` | don't install the Nerd Font |
+| `--update-fonts` | reinstall the font even if it is already installed |
 | `--skip-config` | don't change any shell configuration |
 | `--no-default-shell` | keep bash as the interactive shell |
 | `--default-shell` | start Nushell automatically again (re-runs keep your current choice otherwise) |
 | `--gnome-terminal` | also set the font and Microverse colours in the default GNOME Terminal profile |
-| `--force` | reinstall tools even if the latest version is already installed |
+| `--force` | reinstall tools and font even if the latest version is already installed |
 | `--dry-run` | print which release files would be downloaded |
 
 `GITHUB_TOKEN=<token>` avoids GitHub API rate limits on shared networks.
 
 What it does:
 1. Downloads the latest release of each tool from GitHub (static musl builds where available) into `~/.local/bin`.
-   Oh My Posh comes from its official install script.
-2. Runs `oh-my-posh font install JetBrainsMono` (into `~/.local/share/fonts`).
+   It skips tools that are already at the latest version. Oh My Posh comes from its official install script.
+2. Runs `oh-my-posh font install JetBrainsMono` (into `~/.local/share/fonts`) if the font isn't installed yet.
 3. Copies `config/` to `~/.config/terminal-customization`.
-4. Adds one line to `~/.bashrc` and comments out an old `oh-my-posh init bash` line if there is one.
+4. Adds one line to `~/.bashrc` and disables lines that would load a tool twice, such as an old `oh-my-posh init bash` line.
    Also sets up Nushell, the bat theme, and PowerShell if `pwsh` is installed.
 5. New interactive terminals start Nushell automatically.
 
@@ -410,8 +423,8 @@ kept as `*.tc-backup-<date>`, and your choice of default shell stays as it is.
 | Windows | `irm https://raw.githubusercontent.com/R3start/TerminalCustumization/main/upgrade.ps1 \| iex` or `.\upgrade.ps1` |
 | Linux | `curl -fsSL https://raw.githubusercontent.com/R3start/TerminalCustumization/main/upgrade.sh \| bash` or `./upgrade.sh` |
 
-When run from a git clone, the scripts first `git pull --ff-only` the repository, then run the installer
-and finally print a *before → after* version table. They accept the installer's skip options
+When run from a git clone, the scripts first `git pull --ff-only` the repository. They then run the installer
+with `--update-fonts` / `-UpdateFonts` and finally print a *before → after* version table. They accept the installer's skip options
 (`-SkipTools`, `-SkipFonts`, `-SkipConfig` / `--skip-tools`, `--skip-fonts`, `--skip-config`, `--force`).
 
 ### Manually – Windows
@@ -481,7 +494,7 @@ The scripts show what they will remove and ask for confirmation (`-Yes` / `--yes
 | `-Purge` | `--purge` | also delete zoxide's directory database and the Oh My Posh cache |
 | – | `--gnome-terminal` | reset the GNOME Terminal font/colours set by `install.sh --gnome-terminal` |
 
-Lines the installer commented out in old profiles (`# disabled by terminal-customization: …`) are left alone;
+Lines the installer disabled (`# disabled by terminal-customization: …`, in bash `: # disabled …`) are left alone;
 restore them by hand if you want the old setup back. PSReadLine is part of PowerShell and simply returns to its defaults.
 
 ### Manually – Windows

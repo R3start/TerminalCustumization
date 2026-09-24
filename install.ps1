@@ -26,6 +26,8 @@ param(
     [switch]$SkipTools,
     # Do not install the JetBrainsMono Nerd Font
     [switch]$SkipFonts,
+    # Reinstall the font even when it is already installed (upgrade.ps1 does this)
+    [switch]$UpdateFonts,
     # Do not touch profiles, Nushell or Windows Terminal settings
     [switch]$SkipConfig,
     # Do not make Nushell the default Windows Terminal profile on a first install
@@ -115,6 +117,38 @@ function Update-FileIfChanged([string]$Path, [string]$Content) {
     return $true
 }
 
+# Disables lines outside the marked block that would load a tool a second time (lines added by
+# hand, by the old README or by other installers). They are kept as comments; the file is backed up.
+function Disable-DuplicateLines([string]$Path, [string]$Pattern) {
+    if (-not (Test-Path $Path)) { return }
+    $text = [IO.File]::ReadAllText($Path)
+    $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $inBlock = $false
+    $count = 0
+    $lines = foreach ($line in ($text -split '\r?\n')) {
+        if ($line -eq $MarkBegin) { $inBlock = $true }
+        if (-not $inBlock -and $line -match $Pattern -and $line -notmatch '^\s*#') {
+            $count++
+            "# disabled by terminal-customization: $line"
+        } else {
+            $line
+        }
+        if ($line -eq $MarkEnd) { $inBlock = $false }
+    }
+    if ($count -gt 0) {
+        [void](Update-FileIfChanged $Path ($lines -join $newline))
+        Write-Warn "${Path}: disabled $count line(s) that would load a tool twice (kept as comments, backup saved)"
+    }
+}
+
+function Test-NerdFontInstalled {
+    $dirs = @((Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'), (Join-Path $env:WINDIR 'Fonts'))
+    foreach ($dir in $dirs) {
+        if (Get-ChildItem $dir -Filter 'JetBrainsMono*NerdFont*' -ErrorAction SilentlyContinue | Select-Object -First 1) { return $true }
+    }
+    return $false
+}
+
 # Replaces (or appends) the marked block in a text file.
 function Set-MarkedBlock([string]$Path, [string]$Block) {
     $text = if (Test-Path $Path) { [IO.File]::ReadAllText($Path) } else { '' }
@@ -136,18 +170,28 @@ if (-not $SkipTools) {
         throw 'winget was not found. Install "App Installer" from the Microsoft Store (https://aka.ms/getwinget) and run this script again.'
     }
     # 0x8A15002B = no newer version available, 0x8A150061 = already installed
-    $okCodes = @(0, -1978335189, -1978335135)
+    $upToDateCodes = @(-1978335189, -1978335135)
     $failed = @()
     foreach ($id in $Packages.Keys) {
-        # `winget install` upgrades an already installed package to the latest version.
+        $command = $Packages[$id]
         Write-Host "  ... $id" -ForegroundColor DarkGray
-        $code = Invoke-Quiet { winget install --id $id --exact --source winget --silent `
-            --accept-package-agreements --accept-source-agreements --disable-interactivity }
-        if ($okCodes -contains $code) {
-            Write-Ok $id
+        $managed = (Invoke-Quiet { winget list --id $id --exact --accept-source-agreements --disable-interactivity }) -eq 0
+        $existing = Get-Command $command -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($managed) {
+            # Installed with winget (or the Store): only upgrade, never install a second copy.
+            $code = Invoke-Quiet { winget upgrade --id $id --exact --silent `
+                --accept-package-agreements --accept-source-agreements --disable-interactivity }
+            if ($code -eq 0) { Write-Ok "$id upgraded to the latest version" }
+            elseif ($upToDateCodes -contains $code) { Write-Ok "$id already latest" }
+            else { Write-Warn "$id upgrade failed (winget exit code $code)"; $failed += $id }
+        } elseif ($existing) {
+            # Installed some other way (scoop, choco, manual): leave it alone instead of adding a duplicate.
+            Write-Warn "$id skipped: '$command' is already installed at $($existing.Source) (not by winget); update it with the tool you installed it with"
         } else {
-            Write-Warn "$id failed (winget exit code $code)"
-            $failed += $id
+            $code = Invoke-Quiet { winget install --id $id --exact --source winget --silent `
+                --accept-package-agreements --accept-source-agreements --disable-interactivity }
+            if ($code -eq 0 -or $upToDateCodes -contains $code) { Write-Ok "$id installed" }
+            else { Write-Warn "$id failed (winget exit code $code)"; $failed += $id }
         }
     }
     Update-SessionPath
@@ -158,7 +202,9 @@ Update-SessionPath
 # --- 2. font ------------------------------------------------------------------------
 if (-not $SkipFonts) {
     Write-Step 'Installing JetBrainsMono Nerd Font (latest release)'
-    if (Test-Command oh-my-posh) {
+    if (-not $UpdateFonts -and (Test-NerdFontInstalled)) {
+        Write-Ok 'JetBrainsMono Nerd Font already installed (upgrade.ps1 or -UpdateFonts refreshes it)'
+    } elseif (Test-Command oh-my-posh) {
         oh-my-posh font install JetBrainsMono
         if ($LASTEXITCODE -eq 0) { Write-Ok 'JetBrainsMono Nerd Font installed' }
         else { Write-Warn 'Font installation failed, see README "Fonts" for the manual steps' }
@@ -195,19 +241,13 @@ $MarkBegin
 . "`$HOME\.config\terminal-customization\powershell\profile.ps1"
 $MarkEnd
 "@
-$oldLinePattern = '^\s*[^#].*(oh-my-posh(\.exe)?\s+init|Import-Module\s+(-Name\s+)?(Terminal-Icons|PSReadLine)|Set-PSReadLineOption)'
+# Lines from the previous version of this repo (PSReadLine, Terminal-Icons, oh-my-posh), other zoxide
+# init lines and hand-added copies of the line below would load things twice.
+$duplicatePattern = 'oh-my-posh(\.exe)?\s+init|zoxide(\.exe)?\s+init|Import-Module\s+(-Name\s+)?(Terminal-Icons|PSReadLine)|Set-PSReadLineOption|terminal-customization[\\/]powershell[\\/]profile\.ps1'
 foreach ($edition in 'PowerShell', 'WindowsPowerShell') {
     $dir = Join-Path $documents $edition
-    # Comment out lines from the previous version of this repo (PSReadLine, Terminal-Icons, old oh-my-posh init).
     foreach ($name in 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1', 'profile.ps1') {
-        $path = Join-Path $dir $name
-        if (-not (Test-Path $path)) { continue }
-        $lines = @(Get-Content $path)
-        if (-not ($lines | Where-Object { $_ -match $oldLinePattern })) { continue }
-        Backup-File $path
-        $lines = $lines | ForEach-Object { if ($_ -match $oldLinePattern) { "# disabled by terminal-customization: $_" } else { $_ } }
-        Write-Utf8File $path (($lines -join "`r`n") + "`r`n")
-        Write-Warn "commented out old PSReadLine/Terminal-Icons/oh-my-posh lines in $path"
+        Disable-DuplicateLines (Join-Path $dir $name) $duplicatePattern
     }
     Set-MarkedBlock (Join-Path $dir 'profile.ps1') $profileBlock
     Write-Ok "$edition profile: $(Join-Path $dir 'profile.ps1')"
@@ -238,9 +278,15 @@ if (-not $KeepOldModules) {
 if (Test-Command bat) {
     $batThemes = Join-Path (bat --config-dir) 'themes'
     New-Item -ItemType Directory -Path $batThemes -Force | Out-Null
-    Copy-Item (Join-Path $TcHome 'bat/themes/Microverse.tmTheme') $batThemes -Force
-    bat cache --build | Out-Null
-    Write-Ok "bat theme 'Microverse' installed"
+    $theme = Join-Path $TcHome 'bat/themes/Microverse.tmTheme'
+    $installedTheme = Join-Path $batThemes 'Microverse.tmTheme'
+    if ((Test-Path $installedTheme) -and [IO.File]::ReadAllText($installedTheme) -ceq [IO.File]::ReadAllText($theme)) {
+        Write-Ok "bat theme 'Microverse' already installed"
+    } else {
+        Copy-Item $theme $batThemes -Force
+        Invoke-Quiet { bat cache --build } | Out-Null
+        Write-Ok "bat theme 'Microverse' installed"
+    }
 }
 
 # --- 6. Nushell ------------------------------------------------------------------------
@@ -251,6 +297,7 @@ if (Test-Command nu) {
     $autoload = Join-Path $nuConfigDir 'autoload'
     New-Item -ItemType Directory -Path $autoload -Force | Out-Null
     Copy-Item (Join-Path $TcHome 'nushell/terminal-customization.nu') $autoload -Force
+    Disable-DuplicateLines $nuConfig 'oh-my-posh(\.exe)?\s+init\s+nu|zoxide(\.exe)?\s+init\s+nushell|fzf(\.exe)?\s+--nushell|source\s+.*\.zoxide\.nu|source\s+.*oh-my-posh\.nu'
     Set-MarkedBlock $nuConfig ([IO.File]::ReadAllText((Join-Path $TcHome 'nushell/config-snippet.nu')))
     # Generate the integration scripts once now; config.nu refreshes them on every start.
     if (Test-Command zoxide) { Write-Utf8File (Join-Path $autoload 'zoxide.nu') ((zoxide init nushell) -join "`n") }

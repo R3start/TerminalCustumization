@@ -5,8 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/R3start/TerminalCustumization/main/upgrade.sh | bash
 #
 # 1. From a git clone: pulls the latest version of this repository (fast-forward only).
-# 2. Runs install.sh, which downloads the latest release of every tool, refreshes the
-#    JetBrainsMono Nerd Font and the configuration files. Your choices (default shell,
+# 2. Runs install.sh --update-fonts, which downloads the latest release of every tool,
+#    refreshes the JetBrainsMono Nerd Font and the configuration files. Your choices (default shell,
 #    your own edits to rc files) are kept; changed config files are backed up first.
 # 3. Prints the versions before and after.
 #
@@ -47,9 +47,9 @@ if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/install.sh" ]]; then
     git -C "$SCRIPT_DIR" pull --ff-only </dev/null ||
       echo "  ! git pull failed (local changes?) - continuing with the current checkout" >&2
   fi
-  bash "$SCRIPT_DIR/install.sh" "$@" </dev/null
+  bash "$SCRIPT_DIR/install.sh" --update-fonts "$@" </dev/null
 else
-  curl -fsSL "$REPO_RAW/install.sh" | bash -s -- "$@"
+  curl -fsSL "$REPO_RAW/install.sh" | bash -s -- --update-fonts "$@"
 fi
 
 after=$(versions)

@@ -46,7 +46,7 @@ CONFIG_FILES=(
   ripgrep/ripgreprc
 )
 
-DO_TOOLS=1 DO_FONTS=1 DO_CONFIG=1 DEFAULT_NU='' FORCE=0 DRY_RUN=0 GNOME_THEME=0
+DO_TOOLS=1 DO_FONTS=1 UPDATE_FONTS=0 DO_CONFIG=1 DEFAULT_NU='' FORCE=0 DRY_RUN=0 GNOME_THEME=0
 
 usage() {
   cat <<EOF
@@ -54,11 +54,12 @@ Usage: install.sh [options]
 
   --skip-tools        do not install/upgrade the CLI tools
   --skip-fonts        do not install the JetBrainsMono Nerd Font
+  --update-fonts      reinstall the font even if it is already installed (upgrade.sh does this)
   --skip-config       do not touch shell configuration files
   --no-default-shell  keep bash as the interactive shell (do not start Nushell automatically)
   --default-shell     start Nushell automatically again (the default on a first install)
   --gnome-terminal    also apply the font and Microverse colours to the default GNOME Terminal profile
-  --force             reinstall tools even when the latest version is already installed
+  --force             reinstall tools and font even when the latest version is already installed
   --dry-run           only print what would be downloaded
   -h, --help          show this help
 
@@ -70,11 +71,12 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-tools) DO_TOOLS=0 ;;
     --skip-fonts) DO_FONTS=0 ;;
+    --update-fonts) UPDATE_FONTS=1 ;;
     --skip-config) DO_CONFIG=0 ;;
     --no-default-shell) DEFAULT_NU=0 ;;
     --default-shell) DEFAULT_NU=1 ;;
     --gnome-terminal) GNOME_THEME=1 ;;
-    --force) FORCE=1 ;;
+    --force) FORCE=1; UPDATE_FONTS=1 ;;
     --dry-run) DRY_RUN=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -142,17 +144,30 @@ pick_asset() {
 # Tag of a release download URL (…/releases/download/<tag>/<file>), without a leading "v".
 url_version() { local v=${1%/*}; v=${v##*/}; echo "${v#v}"; }
 
+# Succeeds when <command> is already installed (anywhere on PATH) in <version>.
+# Prints a note when an older copy outside $BIN_DIR is going to be shadowed.
+is_latest() {
+  local name=$1 version=$2 path current
+  path=$(command -v "$name" 2>/dev/null) || return 1
+  current=$(if [[ $name == oh-my-posh ]]; then "$path" version; else "$path" --version; fi 2>/dev/null | head -n3 || true)
+  if grep -qF "$version" <<<"$current"; then
+    if [[ "$path" == "$BIN_DIR/$name" ]]; then ok "$name $version (already latest)"
+    else ok "$name $version (already latest, $path)"; fi
+    return 0
+  fi
+  if [[ "$path" != "$BIN_DIR/$name" ]]; then
+    warn "$name: $path is older; the latest version goes to $BIN_DIR (first in PATH). Remove the old copy with the tool that installed it."
+  fi
+  return 1
+}
+
 install_tool() {
-  local name=$1 repo=$2 bins=$3 url version archive dir bin found current
+  local name=$1 repo=$2 bins=$3 url version archive dir bin found
   url=$(release_assets "$repo" | pick_asset) || { warn "$name: no Linux release asset found for $(uname -m)"; return 1; }
   version=$(url_version "$url")
 
   if [[ $DRY_RUN == 1 ]]; then ok "$name $version  <- $url"; return 0; fi
-
-  if [[ $FORCE == 0 && -x "$BIN_DIR/$name" ]]; then
-    current=$("$BIN_DIR/$name" --version 2>/dev/null | head -n3 || true)
-    if grep -qF "$version" <<<"$current"; then ok "$name $version (already latest)"; return 0; fi
-  fi
+  [[ $FORCE == 0 ]] && is_latest "$name" "$version" && return 0
 
   archive="$TMP_DIR/$name.tar.gz"
   dir="$TMP_DIR/$name"
@@ -170,7 +185,10 @@ install_tool() {
 }
 
 install_oh_my_posh() {
-  if [[ $DRY_RUN == 1 ]]; then ok "oh-my-posh <- https://ohmyposh.dev/install.sh"; return 0; fi
+  local version
+  version=$(release_assets JanDeDobbeleer/oh-my-posh | head -n1) && version=$(url_version "$version") || version=''
+  if [[ $DRY_RUN == 1 ]]; then ok "oh-my-posh ${version:-latest} <- https://ohmyposh.dev/install.sh"; return 0; fi
+  [[ $FORCE == 0 && -n "$version" ]] && is_latest oh-my-posh "$version" && return 0
   # Official installer; always fetches the latest release.
   curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d "$BIN_DIR" >/dev/null
   ok "oh-my-posh $("$BIN_DIR/oh-my-posh" version 2>/dev/null || echo installed)"
@@ -214,6 +232,29 @@ copy_configs() {
   fi
 }
 
+# Disables lines outside the marked block that would load a tool a second time
+# (lines added by hand, by the old README or by other installers). The lines are kept,
+# prefixed with <prefix>, and the file is backed up.
+disable_duplicates() {
+  local file=$1 re=$2 prefix=$3 new count
+  [[ -f "$file" ]] || return 0
+  new="$file.tc-tmp"
+  TC_RE="$re" TC_PREFIX="$prefix" awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+    BEGIN { re = ENVIRON["TC_RE"]; p = ENVIRON["TC_PREFIX"] }
+    $0 == b { inblock = 1 }
+    !inblock && $0 ~ re && $0 !~ /^[[:space:]]*(:[[:space:]]*)?#/ { print p $0; n++; next }
+    { print }
+    $0 == e { inblock = 0 }
+    END { print n + 0 > "/dev/stderr" }' "$file" > "$new" 2> "$TMP_DIR/count"
+  count=$(cat "$TMP_DIR/count")
+  if [[ $count -gt 0 ]]; then
+    replace_if_changed "$new" "$file"
+    warn "$file: disabled $count line(s) that would load a tool twice (kept as comments, backup saved)"
+  else
+    rm -f "$new"
+  fi
+}
+
 # Replaces (or appends) the marked block in <file> with <content>.
 write_block() {
   local file=$1 content=$2 new="$1.tc-tmp"
@@ -231,12 +272,10 @@ write_block() {
 
 setup_bash() {
   local rc="$HOME/.bashrc"
-  # Disable prompt lines from the old manual instructions (~/.poshthemes), the block below replaces them.
-  if [[ -f "$rc" ]] && grep -Eq '^[^#]*oh-my-posh init bash' "$rc" && ! grep -qF "$MARK_BEGIN" "$rc"; then
-    backup "$rc"
-    sed -i -E 's/^([^#]*oh-my-posh init bash.*)$/# disabled by terminal-customization: \1/' "$rc"
-    warn "commented out an old oh-my-posh line in ~/.bashrc"
-  fi
+  # `:` keeps an if/fi block valid when its only line is disabled.
+  disable_duplicates "$rc" \
+    'oh-my-posh init bash|zoxide init bash|fzf --bash|[.]fzf[.]bash|terminal-customization[.]bash' \
+    ': # disabled by terminal-customization: '
   write_block "$rc" "$MARK_BEGIN
 [ -f \"\$HOME/.config/terminal-customization/bash/terminal-customization.bash\" ] && . \"\$HOME/.config/terminal-customization/bash/terminal-customization.bash\"
 $MARK_END"
@@ -257,6 +296,10 @@ setup_bat() {
   local dir
   dir="$(bat --config-dir)/themes"
   mkdir -p "$dir"
+  if cmp -s "$TC_HOME/bat/themes/Microverse.tmTheme" "$dir/Microverse.tmTheme" && bat --list-themes 2>/dev/null | grep -q '^Microverse'; then
+    ok "bat theme 'Microverse' already installed"
+    return 0
+  fi
   cp "$TC_HOME/bat/themes/Microverse.tmTheme" "$dir/"
   bat cache --build >/dev/null
   ok "bat theme 'Microverse' installed"
@@ -270,6 +313,9 @@ setup_nushell() {
   autoload="$cfg_dir/autoload"
   mkdir -p "$autoload"
   cp "$TC_HOME/nushell/terminal-customization.nu" "$autoload/"
+  disable_duplicates "$cfg" \
+    'oh-my-posh init nu|zoxide init nushell|fzf --nushell|source .*[.]zoxide[.]nu|source .*oh-my-posh[.]nu' \
+    '# disabled by terminal-customization: '
   write_block "$cfg" "$(cat "$TC_HOME/nushell/config-snippet.nu")"   # snippet carries its own markers
   # Generate the integration scripts once now (config.nu refreshes them on every start).
   has zoxide && zoxide init nushell > "$autoload/zoxide.nu"
@@ -282,6 +328,12 @@ setup_pwsh() {
   has pwsh || return 0
   local profile_path
   profile_path=$(pwsh -NoLogo -NoProfile -Command 'Write-Output $PROFILE.CurrentUserAllHosts' </dev/null)
+  local f
+  for f in "$profile_path" "$(dirname "$profile_path")/Microsoft.PowerShell_profile.ps1" "$(dirname "$profile_path")/Microsoft.VSCode_profile.ps1"; do
+    disable_duplicates "$f" \
+      'oh-my-posh(\.exe)? +init|zoxide init powershell|terminal-customization[/\\]powershell[/\\]profile[.]ps1|Import-Module +(-Name +)?(Terminal-Icons|PSReadLine)|Set-PSReadLineOption' \
+      '# disabled by terminal-customization: '
+  done
   write_block "$profile_path" "$MARK_BEGIN
 . \"\$HOME/.config/terminal-customization/powershell/profile.ps1\"
 $MARK_END"
@@ -320,9 +372,20 @@ fi
 
 [[ $DRY_RUN == 1 ]] && exit 0
 
+font_installed() {
+  if has fc-list; then
+    fc-list : family 2>/dev/null | grep -qi 'JetBrainsMono Nerd Font'
+  else
+    compgen -G "$HOME/.local/share/fonts/JetBrainsMono*NerdFont*" >/dev/null ||
+      compgen -G "/usr/share/fonts/**/JetBrainsMono*NerdFont*" >/dev/null
+  fi
+}
+
 if [[ $DO_FONTS == 1 ]]; then
   step "Installing JetBrainsMono Nerd Font (latest)"
-  if has oh-my-posh && oh-my-posh font install JetBrainsMono </dev/null; then
+  if [[ $UPDATE_FONTS == 0 ]] && font_installed; then
+    ok "JetBrainsMono Nerd Font already installed (upgrade.sh or --update-fonts refreshes it)"
+  elif has oh-my-posh && oh-my-posh font install JetBrainsMono </dev/null; then
     has fc-cache && fc-cache -f >/dev/null 2>&1 || true
     ok "font installed - select 'JetBrainsMono Nerd Font' in your terminal settings"
   else
