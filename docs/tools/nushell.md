@@ -2,6 +2,8 @@
 
 <https://www.nushell.sh> · <https://github.com/nushell/nushell> · [Nushell Book](https://www.nushell.sh/book/)
 
+![Nushell in the microverse theme](../images/nushell.png)
+
 Nushell (`nu`) is a modern shell where commands output **structured data** (tables and records)
 instead of plain text. This setup opens Nushell automatically in every new terminal.
 
@@ -9,8 +11,8 @@ instead of plain text. This setup opens Nushell automatically in every new termi
 
 | OS | Mechanism | How to opt out |
 |----|-----------|----------------|
-| Windows | Windows Terminal profile **Nushell (Microverse)** is set as the default profile | pick another profile in *Settings → Startup → Default profile*, or run `install.ps1 -NoDefaultShell` |
-| Linux | `~/.bashrc` hands off to `nu` for interactive terminals (`exec nu`) | `TC_NO_NU=1 bash` for one session, `touch ~/.config/terminal-customization/no-nu` permanently, or `install.sh --no-default-shell` |
+| Windows | Windows Terminal profile **Nushell (Microverse)** is set as the default profile | pick another profile in *Settings → Startup → Default profile* (upgrades keep your choice); `install.ps1 -DefaultShell` switches back to Nushell |
+| Linux | `~/.bashrc` hands off to `nu` for interactive terminals (`exec nu`) | `TC_NO_NU=1 bash` for one session; `install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`) permanently; `--default-shell` switches back |
 
 Typing `bash` or `pwsh` inside Nushell gives you that shell (no loop); `exit` returns to Nushell.
 Your login shell stays bash, so scripts and system tools are not affected.

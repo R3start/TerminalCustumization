@@ -2,6 +2,8 @@
 
 <https://github.com/eza-community/eza> · <https://eza.rocks>
 
+![eza in the microverse theme](../images/eza.png)
+
 eza is a replacement for `ls` with colours, **Nerd Font icons**, git status and a tree view.
 It replaces the old *Terminal-Icons* PowerShell module.
 

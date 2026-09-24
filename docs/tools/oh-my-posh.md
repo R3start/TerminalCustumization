@@ -2,14 +2,11 @@
 
 <https://ohmyposh.dev> · <https://github.com/JanDeDobbeleer/oh-my-posh>
 
+![Oh My Posh in the microverse theme](../images/oh-my-posh.png)
+
 Oh My Posh draws the prompt. This setup uses the **microverse-power** theme, stored in the repo at
 [`config/oh-my-posh/microverse-power.omp.json`](../../config/oh-my-posh/microverse-power.omp.json)
 and installed to `~/.config/terminal-customization/oh-my-posh/`.
-
-```
- <os>  user  2026-09-24 10:15:00   ~/projects/app   main   
-➜
-```
 
 Segments: OS icon · user (red) · date/time (yellow) · full path (green) · git branch + stash count (blue) ·
 status (green, red when the last command failed), then `➜` on a new line.

@@ -2,6 +2,8 @@
 
 <https://github.com/bootandy/dust>
 
+![dust in the microverse theme](../images/dust.png)
+
 dust (`du` + rust) shows the largest directories and files as a tree with bar charts.
 
 ## Install

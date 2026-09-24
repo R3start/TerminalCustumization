@@ -2,6 +2,8 @@
 
 <https://github.com/ajeetdsouza/zoxide>
 
+![zoxide in the microverse theme](../images/zoxide.png)
+
 zoxide remembers the directories you visit and jumps to the best match from a few letters.
 
 ## Install

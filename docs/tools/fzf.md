@@ -2,6 +2,8 @@
 
 <https://github.com/junegunn/fzf>
 
+![fzf in the microverse theme](../images/fzf.png)
+
 fzf filters any list interactively. In this setup it replaces **PSReadLine's** history search and
 predictions: history, files and directories are all searched with fzf.
 

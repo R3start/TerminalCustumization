@@ -2,6 +2,8 @@
 
 <https://github.com/sharkdp/bat>
 
+![bat in the microverse theme](../images/bat.png)
+
 bat prints files with syntax highlighting, line numbers and git change markers, and pages long output.
 
 ## Install

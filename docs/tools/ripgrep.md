@@ -2,6 +2,8 @@
 
 <https://github.com/BurntSushi/ripgrep>
 
+![ripgrep (`rg`) in the microverse theme](../images/ripgrep.png)
+
 ripgrep searches file contents recursively, respects `.gitignore` and is much faster than `grep`/`Select-String`.
 
 ## Install

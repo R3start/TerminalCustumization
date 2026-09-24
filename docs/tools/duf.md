@@ -2,6 +2,8 @@
 
 <https://github.com/muesli/duf>
 
+![duf in the microverse theme](../images/duf.png)
+
 duf shows mounted disks with used/free space as colourful tables. It is a friendlier `df`
 and works the same on Windows and Linux.
 

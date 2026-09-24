@@ -3,13 +3,25 @@
 A modern, consistent terminal on **Windows** and **Linux**: an Oh My Posh prompt, Nushell as the
 default shell, and a set of fast CLI tools that all share the same *microverse-power* colour palette.
 
-![screenshot.png](screenshot.png "Screenshot")
+![Nushell with the microverse-power prompt, eza, a Nushell table and bat](screenshot.png "Nushell in Windows Terminal / Linux")
+
+<details>
+<summary>More screenshots: PowerShell 7, fzf, zoxide, Oh My Posh status</summary>
+
+| PowerShell 7 (same profile on Windows and Linux) | fzf file picker (`Ctrl+T`) with bat preview |
+|---|---|
+| ![PowerShell](docs/images/powershell.png) | ![fzf](docs/images/fzf.png) |
+| **zoxide** `z` / `zi` | **Oh My Posh** prompt, red status after a failed command |
+| ![zoxide](docs/images/zoxide.png) | ![Oh My Posh](docs/images/oh-my-posh.png) |
+
+Every [tool guide](docs/tools/README.md) has its own screenshot.
+</details>
 
 - [What gets installed](#what-gets-installed)
 - [One-click install](#one-click-install)
 - [Manual installation – Windows](#manual-installation--windows)
 - [Manual installation – Linux](#manual-installation--linux)
-- [Updating](#updating) · [Uninstalling](#uninstalling) · [Troubleshooting](#troubleshooting)
+- [Upgrading](#upgrading) · [Uninstalling](#uninstalling) · [Troubleshooting](#troubleshooting)
 - [Tool guides](docs/tools/README.md)
 
 ## What gets installed
@@ -54,10 +66,10 @@ default shell, and a set of fast CLI tools that all share the same *microverse-p
 
 ## One-click install
 
-The installers are safe to run again. Each run installs the **latest release** of every tool, so running
-one again is also how you update. Existing configuration files are never overwritten.
-A marked block (`# >>> terminal-customization >>>`) is added to them, and a `*.tc-backup-<date>` copy is
-kept whenever a file is changed.
+The installers are safe to run again. Each run installs the **latest release** of every tool
+(see [Upgrading](#upgrading) for the dedicated upgrade scripts). Your own configuration files are never overwritten:
+a marked block (`# >>> terminal-customization >>>`) is added to them, and a `*.tc-backup-<date>` copy is
+kept whenever a file actually changes. Re-runs keep your choice of default shell.
 
 ### Windows 10/11
 
@@ -76,7 +88,8 @@ Options (from a clone, or with `& ([scriptblock]::Create((irm <url>))) -Option`)
 | `-SkipTools` | don't install/upgrade anything with winget |
 | `-SkipFonts` | don't install the Nerd Font |
 | `-SkipConfig` | only install tools and font |
-| `-NoDefaultShell` | keep your current default Windows Terminal profile |
+| `-NoDefaultShell` | first install: keep your current default Windows Terminal profile |
+| `-DefaultShell` | make **Nushell (Microverse)** the default profile again (re-runs don't touch it otherwise) |
 | `-KeepOldModules` | don't remove PSReadLine/Terminal-Icons installed from the PowerShell Gallery |
 
 What it does:
@@ -89,7 +102,7 @@ What it does:
    PSReadLine/Terminal-Icons lines.
 5. Configures Nushell and the bat theme.
 6. Adds a **Nushell (Microverse)** Windows Terminal profile with the Microverse colour scheme and the Nerd Font,
-   and makes it the default profile.
+   and makes it the default profile (first install only, or with `-DefaultShell`).
 
 ### Linux (x86_64 / aarch64, any distribution)
 
@@ -107,6 +120,7 @@ Or from a clone: `./install.sh`. Pass options with `curl … | bash -s -- --opti
 | `--skip-fonts` | don't install the Nerd Font |
 | `--skip-config` | don't change any shell configuration |
 | `--no-default-shell` | keep bash as the interactive shell |
+| `--default-shell` | start Nushell automatically again (re-runs keep your current choice otherwise) |
 | `--gnome-terminal` | also set the font and Microverse colours in the default GNOME Terminal profile |
 | `--force` | reinstall tools even if the latest version is already installed |
 | `--dry-run` | print which release files would be downloaded |
@@ -369,7 +383,7 @@ Profile → Command → Run a custom command instead of my shell* → `nu`).
 
 The Microverse palette as terminal colours (0–15):
 `#242424 #F1184C #33DD2D #FFBB00 #3A86FF #B45CFF #2EC4E6 #D0D0D0 #6C6C6C #FF4D74 #66F060 #FFD24D #6FA8FF #CC8CFF #6FDAF2 #FFFFFF`,
-background `#1B1B1B`, foreground `#E6E6E6`. `./install.sh --skip-tools --skip-fonts --gnome-terminal` applies them to GNOME Terminal.
+background `#0C0C0C`, foreground `#E6E6E6`. `./install.sh --skip-tools --skip-fonts --gnome-terminal` applies them to GNOME Terminal.
 
 ### 9. PowerShell on Linux (optional)
 
@@ -383,20 +397,128 @@ gh auth login
 
 ---
 
-## Updating
+## Upgrading
 
-- **One-click:** run the installer again. Tools are upgraded to their latest releases and the config files are refreshed.
-- **Windows, manually:** `winget upgrade --all` (or `winget upgrade <id>`), then `oh-my-posh font install JetBrainsMono`.
-- **Linux, manually:** repeat the download step for each tool, and use `oh-my-posh upgrade`.
+Every tool is upgraded to its **latest release**, the JetBrainsMono Nerd Font is refreshed and the
+configuration files in `~/.config/terminal-customization` are updated. Your own edits to those files are
+kept as `*.tc-backup-<date>`, and your choice of default shell stays as it is.
+
+### With the upgrade scripts
+
+| | Command |
+|-|---------|
+| Windows | `irm https://raw.githubusercontent.com/R3start/TerminalCustumization/main/upgrade.ps1 \| iex` or `.\upgrade.ps1` |
+| Linux | `curl -fsSL https://raw.githubusercontent.com/R3start/TerminalCustumization/main/upgrade.sh \| bash` or `./upgrade.sh` |
+
+When run from a git clone, the scripts first `git pull --ff-only` the repository, then run the installer
+and finally print a *before → after* version table. They accept the installer's skip options
+(`-SkipTools`, `-SkipFonts`, `-SkipConfig` / `--skip-tools`, `--skip-fonts`, `--skip-config`, `--force`).
+
+### Manually – Windows
+
+```powershell
+# 1. tools (all winget packages, or one by one)
+winget upgrade --all --source winget
+winget upgrade --id JanDeDobbeleer.OhMyPosh --source winget      # etc. for each id in "Manual installation"
+
+# 2. font
+oh-my-posh font install JetBrainsMono
+
+# 3. configuration: pull the repo and copy config/ again
+git -C TerminalCustumization pull
+Copy-Item -Recurse -Force .\TerminalCustumization\config\* "$HOME\.config\terminal-customization\"
+bat cache --build                                                # if the bat theme changed
+```
+
+Nushell's integration scripts (Oh My Posh, zoxide, fzf) regenerate themselves on every start, so they
+always match the upgraded tools. Restart the terminal afterwards.
+
+### Manually – Linux
+
+```bash
+# 1. Oh My Posh
+oh-my-posh upgrade            # or: curl -s https://ohmyposh.dev/install.sh | bash -s -- -d ~/.local/bin
+
+# 2. every other tool: download the newest archive from its "latest release" page
+#    (table in "Manual installation – Linux") and copy the binary over the old one, e.g.
+curl -LO https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-musl.tar.gz
+tar -xzf eza_x86_64-unknown-linux-musl.tar.gz && install -m 755 eza ~/.local/bin/
+
+# 3. font
+oh-my-posh font install JetBrainsMono && fc-cache -f
+
+# 4. configuration
+git -C TerminalCustumization pull
+cp -r TerminalCustumization/config/. ~/.config/terminal-customization/
+bat cache --build
+```
+
+Check the result with `eza --version`, `nu --version`, `oh-my-posh version`, and so on.
 
 ## Uninstalling
 
-1. Remove the `# >>> terminal-customization >>>` … `# <<< terminal-customization <<<` blocks from `~/.bashrc`,
-   the PowerShell `profile.ps1` files and Nushell's `config.nu`. The `.tc-backup-*` files next to them are the previous versions.
-2. Delete `~/.config/terminal-customization`, plus `terminal-customization.nu`, `zoxide.nu` and `fzf.nu` from Nushell's `autoload` folder.
-3. Windows: delete `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\TerminalCustomization` and choose another default profile.
-   To remove the tools: `winget uninstall <id>`.
-4. Linux: delete the binaries from `~/.local/bin` (`nu nu_plugin_* eza bat rg fzf zoxide duf dust gh oh-my-posh`).
+### With the uninstall scripts
+
+| | Command |
+|-|---------|
+| Windows | `.\uninstall.ps1` or `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/R3start/TerminalCustumization/main/uninstall.ps1))) -Yes` |
+| Linux | `./uninstall.sh` or `curl -fsSL https://raw.githubusercontent.com/R3start/TerminalCustumization/main/uninstall.sh \| bash -s -- --yes` |
+
+The scripts show what they will remove and ask for confirmation (`-Yes` / `--yes` skips the question). They remove:
+
+- the `terminal-customization` blocks from `~/.bashrc`, the PowerShell profiles and Nushell's `config.nu`
+  (each edited file is backed up as `*.tc-backup-<date>` first);
+- the Nushell autoload scripts, the bat **Microverse** theme and `~/.config/terminal-customization`;
+- Windows: the **Nushell (Microverse)** Windows Terminal profile. If it was the default, PowerShell becomes the default again;
+- the tools: `winget uninstall` on Windows (Windows Terminal and PowerShell 7 are kept), the binaries in `~/.local/bin` on Linux;
+- the per-user JetBrainsMono Nerd Font.
+
+| Windows | Linux | Keeps / also removes |
+|---------|-------|----------------------|
+| `-KeepTools` | `--keep-tools` | keep the tools |
+| `-KeepFonts` | `--keep-fonts` | keep the font |
+| `-KeepConfig` | `--keep-config` | keep `~/.config/terminal-customization` |
+| `-Purge` | `--purge` | also delete zoxide's directory database and the Oh My Posh cache |
+| – | `--gnome-terminal` | reset the GNOME Terminal font/colours set by `install.sh --gnome-terminal` |
+
+Lines the installer commented out in old profiles (`# disabled by terminal-customization: …`) are left alone;
+restore them by hand if you want the old setup back. PSReadLine is part of PowerShell and simply returns to its defaults.
+
+### Manually – Windows
+
+1. **Profiles:** open `Documents\PowerShell\profile.ps1` and `Documents\WindowsPowerShell\profile.ps1` and delete the
+   lines from `# >>> terminal-customization >>>` to `# <<< terminal-customization <<<`.
+2. **Nushell:** in `nu`, run `config nu` and delete the same block. Then delete these files:
+   ```nu
+   rm ($nu.default-config-dir | path join autoload terminal-customization.nu) ($nu.default-config-dir | path join autoload zoxide.nu) ($nu.default-config-dir | path join autoload fzf.nu)
+   rm ($nu.data-dir | path join vendor autoload oh-my-posh.nu)
+   ```
+3. **Windows Terminal:** *Settings → Startup → Default profile* → **PowerShell**, then delete
+   `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\TerminalCustomization`.
+4. **bat theme:** delete `%APPDATA%\bat\themes\Microverse.tmTheme` and run `bat cache --build`.
+5. **Tools:**
+   ```powershell
+   'JanDeDobbeleer.OhMyPosh','Nushell.Nushell','eza-community.eza','sharkdp.bat','BurntSushi.ripgrep.MSVC',
+   'junegunn.fzf','ajeetdsouza.zoxide','muesli.duf','bootandy.dust','GitHub.cli' |
+       ForEach-Object { winget uninstall --id $_ --exact }
+   ```
+6. **Font:** *Settings → Personalization → Fonts* → search "JetBrainsMono" → each **JetBrainsMono Nerd Font** entry → *Uninstall*.
+7. **Configuration:** `Remove-Item -Recurse "$HOME\.config\terminal-customization"`.
+
+### Manually – Linux
+
+1. **bash:** delete the `# >>> terminal-customization >>>` … `# <<< terminal-customization <<<` block from `~/.bashrc`.
+2. **Nushell:** `config nu` → delete the same block. Then:
+   ```nu
+   rm ($nu.default-config-dir | path join autoload terminal-customization.nu) ($nu.default-config-dir | path join autoload zoxide.nu) ($nu.default-config-dir | path join autoload fzf.nu)
+   rm ($nu.data-dir | path join vendor autoload oh-my-posh.nu)
+   ```
+3. **PowerShell (if used):** delete the block from `~/.config/powershell/profile.ps1`.
+4. **bat theme:** `rm "$(bat --config-dir)/themes/Microverse.tmTheme" && bat cache --build`
+5. **Tools:** `cd ~/.local/bin && rm -f oh-my-posh nu nu_plugin_* eza bat rg fzf zoxide duf dust gh`
+6. **Font:** `rm -f ~/.local/share/fonts/JetBrainsMono*NerdFont* && fc-cache -f`
+7. **Configuration:** `rm -rf ~/.config/terminal-customization`
+8. Optional data: `rm -rf ~/.local/share/zoxide ~/.cache/oh-my-posh`
 
 ## Troubleshooting
 
@@ -405,7 +527,7 @@ gh auth login
 | Squares or `?` instead of icons | Select **JetBrainsMono Nerd Font** in the terminal settings. On WSL/SSH, install the font on the machine running the terminal. |
 | `command not found` right after installing | Open a new terminal. On Linux, check that `~/.local/bin` is in `PATH`. |
 | PowerShell: "running scripts is disabled" | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| Want bash/PowerShell back as the default | Linux: `touch ~/.config/terminal-customization/no-nu`. Windows: pick another default profile in Windows Terminal. |
+| Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: pick another default profile in Windows Terminal. |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |
 | Nushell prompt has no theme | Oh My Posh needs Nushell ≥ 0.104: upgrade Nushell and re-run the installer. |
@@ -413,8 +535,9 @@ gh auth login
 ## Repository layout
 
 ```
-install.ps1                       Windows one-click installer (winget)
-install.sh                        Linux one-click installer (GitHub releases)
+install.ps1 / install.sh         one-click installers (Windows: winget, Linux: GitHub releases)
+upgrade.ps1 / upgrade.sh         upgrade everything to the latest versions
+uninstall.ps1 / uninstall.sh     remove everything the installers added
 config/
   oh-my-posh/microverse-power.omp.json   prompt theme
   bash/terminal-customization.bash       bash config
@@ -427,6 +550,7 @@ config/
   ripgrep/ripgreprc                      ripgrep defaults and colours
   windows-terminal/terminal-customization.json   Windows Terminal profile + colour scheme
 docs/tools/                       one usage guide per tool
+docs/images/                      screenshots
 ```
 
 ## License
