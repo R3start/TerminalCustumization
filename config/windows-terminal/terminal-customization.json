@@ -3,8 +3,10 @@
   "$schema": "https://aka.ms/terminal-profiles-schema",
   "profiles": [
     {
+      "guid": "{7c3e2a5b-4d1f-4b8e-9a6c-2f5d8e1b3a74}",
       "name": "Nushell (Microverse)",
       "commandline": "nu.exe",
+      "icon": "nu.exe",
       "startingDirectory": "%USERPROFILE%",
       "colorScheme": "Microverse",
       "cursorShape": "bar",

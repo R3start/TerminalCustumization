@@ -51,6 +51,8 @@ $TcHome = Join-Path $HOME '.config\terminal-customization'
 $MarkBegin = '# >>> terminal-customization >>>'
 $MarkEnd = '# <<< terminal-customization <<<'
 $WtProfileName = 'Nushell (Microverse)'
+# Fixed GUID of the Windows Terminal profile (also in config/windows-terminal/terminal-customization.json)
+$WtProfileGuid = '{7c3e2a5b-4d1f-4b8e-9a6c-2f5d8e1b3a74}'
 $StateDir = Join-Path $env:LOCALAPPDATA 'terminal-customization'
 $Manifest = Join-Path $StateDir 'manifest.txt'
 $UserFontDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
@@ -406,32 +408,74 @@ if (Test-Command nu) {
 
 # --- 7. Windows Terminal: profile + colour scheme + default shell --------------------------
 Write-Step 'Configuring Windows Terminal'
-$fragmentDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\TerminalCustomization'
-$firstInstall = -not (Test-Path (Join-Path $fragmentDir 'terminal-customization.json'))
-New-Item -ItemType Directory -Path $fragmentDir -Force | Out-Null
-Copy-Item (Join-Path $TcHome 'windows-terminal/terminal-customization.json') $fragmentDir -Force
-Write-Ok "profile '$WtProfileName' and colour scheme 'Microverse' added"
 
-# Only change the default profile on a first install or when asked; re-runs and upgrades keep your choice.
-if ($DefaultShell -or ($firstInstall -and -not $NoDefaultShell)) {
-    $settingsFiles = @(
-        (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'),
-        (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json'),
-        (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')
-    ) | Where-Object { Test-Path $_ }
-    if (-not $settingsFiles) {
-        Write-Warn "Windows Terminal settings not found. Start Windows Terminal once and re-run, or pick '$WtProfileName' in Settings > Startup > Default profile."
-    }
+# Windows Terminal starts the profile with the PATH it was launched with, which may not include
+# Nushell yet (a fresh install, or an Explorer session started before it). So the profile gets
+# the full path of nu.exe instead of a bare "nu.exe".
+function Find-NuExe {
+    $found = Get-Command nu.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { return $found.Source }
+    $candidates = @(
+        (Join-Path $env:ProgramFiles 'nu\bin\nu.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\nu\bin\nu.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\nu.exe')
+    )
+    if (${env:ProgramFiles(x86)}) { $candidates += Join-Path ${env:ProgramFiles(x86)} 'nu\bin\nu.exe' }
+    foreach ($candidate in $candidates) { if (Test-Path $candidate) { return $candidate } }
+    return $null
+}
+
+$settingsFiles = @(
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'),
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json'),
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')
+) | Where-Object { Test-Path $_ }
+
+$fragmentDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\TerminalCustomization'
+$fragmentFile = Join-Path $fragmentDir 'terminal-customization.json'
+$firstInstall = -not (Test-Path $fragmentFile)
+$nuExe = Find-NuExe
+if (-not $nuExe) {
+    Write-Warn "nu.exe was not found, so the '$WtProfileName' profile was not added. Install Nushell (winget install Nushell.Nushell) and run this script again."
+    # An earlier run may have added the profile and made it the default; a default that can't start
+    # would leave Windows Terminal unusable, so fall back to PowerShell until Nushell is installed.
+    if (Test-Path $fragmentFile) { Remove-Item $fragmentDir -Recurse -Force; Write-Ok "removed the '$WtProfileName' profile" }
+    $fallback = if (Get-Command pwsh -ErrorAction SilentlyContinue) { '{574e775e-4f2a-5b96-ac1e-a2962a402336}' } else { '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}' }
+    $ours = '"defaultProfile"\s*:\s*"(' + [regex]::Escape($WtProfileGuid) + '|' + [regex]::Escape($WtProfileName) + ')"'
     foreach ($settings in $settingsFiles) {
         $json = [IO.File]::ReadAllText($settings)
-        $entry = '"defaultProfile": "' + $WtProfileName + '"'
-        if ($json -match '"defaultProfile"\s*:\s*"[^"]*"') {
+        if ($json -match $ours -and (Update-FileIfChanged $settings ([regex]::Replace($json, $ours, '"defaultProfile": "' + $fallback + '"')))) {
+            Write-Ok "default profile set back to PowerShell in $settings"
+        }
+    }
+} else {
+    $fragment = [IO.File]::ReadAllText((Join-Path $TcHome 'windows-terminal\terminal-customization.json')) | ConvertFrom-Json
+    $fragment.profiles[0].commandline = '"' + $nuExe + '"'
+    $fragment.profiles[0].icon = $nuExe
+    New-Item -ItemType Directory -Path $fragmentDir -Force | Out-Null
+    [void](Update-FileIfChanged $fragmentFile ($fragment | ConvertTo-Json -Depth 10))
+    Write-Ok "profile '$WtProfileName' ($nuExe) and colour scheme 'Microverse' added"
+
+    # Only change the default profile on a first install or when asked; re-runs and upgrades keep
+    # your choice. A default set by an older version of this script (by name) is moved to the GUID.
+    $makeDefault = $DefaultShell -or ($firstInstall -and -not $NoDefaultShell)
+    if ($makeDefault -and -not $settingsFiles) {
+        Write-Warn "Windows Terminal settings not found. Start Windows Terminal once and re-run, or pick '$WtProfileName' in Settings > Startup > Default profile."
+    }
+    $byName = '"defaultProfile"\s*:\s*"' + [regex]::Escape($WtProfileName) + '"'
+    $entry = '"defaultProfile": "' + $WtProfileGuid + '"'
+    foreach ($settings in $settingsFiles) {
+        $json = [IO.File]::ReadAllText($settings)
+        if ($json -match $byName) {
+            $json = [regex]::Replace($json, $byName, $entry, 1)
+        } elseif (-not $makeDefault) {
+            continue
+        } elseif ($json -match '"defaultProfile"\s*:\s*"[^"]*"') {
             $json = [regex]::Replace($json, '"defaultProfile"\s*:\s*"[^"]*"', $entry, 1)
         } else {
             $json = ([regex]'\{').Replace($json, "{`r`n    $entry,", 1)
         }
-        [void](Update-FileIfChanged $settings $json)
-        Write-Ok "default profile set in $settings"
+        if (Update-FileIfChanged $settings $json) { Write-Ok "default profile set to '$WtProfileName' in $settings" }
     }
 }
 

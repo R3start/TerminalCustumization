@@ -528,8 +528,8 @@ font_installed() {
   if has fc-list; then
     fc-list : family 2>/dev/null | grep -qi 'JetBrainsMono Nerd Font'
   else
-    compgen -G "$HOME/.local/share/fonts/JetBrainsMono*NerdFont*" >/dev/null ||
-      compgen -G "/usr/share/fonts/**/JetBrainsMono*NerdFont*" >/dev/null
+    find "$HOME/.local/share/fonts" /usr/share/fonts /usr/local/share/fonts -name 'JetBrainsMono*NerdFont*' \
+      -print -quit 2>/dev/null | grep -q .
   fi
 }
 

@@ -42,6 +42,7 @@ $TcHome = Join-Path $HOME '.config\terminal-customization'
 $MarkBegin = '# >>> terminal-customization >>>'
 $MarkEnd = '# <<< terminal-customization <<<'
 $WtProfileName = 'Nushell (Microverse)'
+$WtProfileGuid = '{7c3e2a5b-4d1f-4b8e-9a6c-2f5d8e1b3a74}'
 $StateDir = Join-Path $env:LOCALAPPDATA 'terminal-customization'
 $Manifest = Join-Path $StateDir 'manifest.txt'
 $WingetTools = 'JanDeDobbeleer.OhMyPosh', 'Nushell.Nushell', 'eza-community.eza', 'sharkdp.bat',
@@ -168,7 +169,8 @@ $settingsFiles = @(
 ) | Where-Object { Test-Path $_ }
 foreach ($settings in $settingsFiles) {
     $json = [IO.File]::ReadAllText($settings)
-    $ours = '"defaultProfile"\s*:\s*"' + [regex]::Escape($WtProfileName) + '"'
+    # By GUID (current installs) or by name (installs made by older versions of install.ps1)
+    $ours = '"defaultProfile"\s*:\s*"(' + [regex]::Escape($WtProfileGuid) + '|' + [regex]::Escape($WtProfileName) + ')"'
     if ($json -match $ours) {
         Backup-File $settings
         Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaultProfile": "' + $fallback + '"'))

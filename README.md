@@ -308,8 +308,13 @@ Copy [`config/windows-terminal/terminal-customization.json`](config/windows-term
 profile and the **Microverse** colour scheme. Restart Windows Terminal, then open *Settings → Startup → Default profile* →
 **Nushell (Microverse)** → *Save*.
 
-Without the fragment, you can add a profile by hand: *Settings → Add a new profile → New empty profile*, command line `nu.exe`,
-font `JetBrainsMono Nerd Font`.
+Then open the fragment copy and set `"commandline"` (and `"icon"`) to the **full path** of `nu.exe`. Find it with
+`(Get-Command nu).Source`; it is usually `"C:\\Program Files\\nu\\bin\\nu.exe"`. The installer does this for you.
+Windows Terminal starts profiles with the PATH it was launched with, so a bare `nu.exe` can fail with
+*"error 2147942402 (0x80070002) when launching `nu.exe`"*.
+
+Without the fragment, you can add a profile by hand: *Settings → Add a new profile → New empty profile*, command line
+`"C:\Program Files\nu\bin\nu.exe"` (the full path from above), font `JetBrainsMono Nerd Font`.
 
 VS Code: add `"terminal.integrated.defaultProfile.windows": "Nushell"` and a profile entry
 `"terminal.integrated.profiles.windows": { "Nushell": { "path": "nu.exe" } }`.
@@ -596,6 +601,7 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 | Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: pick another default profile in Windows Terminal. |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |
+| Windows Terminal: `[error 2147942402 (0x80070002) when launching nu.exe]` | The profile can't find `nu.exe`. Run `install.ps1` again: it points the profile at the full path of `nu.exe`. If Nushell isn't installed, it switches the default profile back to PowerShell and tells you to run `winget install Nushell.Nushell`. By hand: *Settings → Nushell (Microverse) → Command line* → the output of `(Get-Command nu).Source` in quotes. |
 | Nushell prompt has no theme | Oh My Posh needs Nushell ≥ 0.104: upgrade Nushell and re-run the installer. |
 
 ## Repository layout
