@@ -18,7 +18,7 @@
   "schemes": [
     {
       "name": "Microverse",
-      "background": "#1B1B1B",
+      "background": "#0C0C0C",
       "foreground": "#E6E6E6",
       "cursorColor": "#F1184C",
       "selectionBackground": "#3A3A3A",

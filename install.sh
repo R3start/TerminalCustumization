@@ -46,7 +46,7 @@ CONFIG_FILES=(
   ripgrep/ripgreprc
 )
 
-DO_TOOLS=1 DO_FONTS=1 DO_CONFIG=1 DEFAULT_NU=1 FORCE=0 DRY_RUN=0 GNOME_THEME=0
+DO_TOOLS=1 DO_FONTS=1 DO_CONFIG=1 DEFAULT_NU='' FORCE=0 DRY_RUN=0 GNOME_THEME=0
 
 usage() {
   cat <<EOF
@@ -56,6 +56,7 @@ Usage: install.sh [options]
   --skip-fonts        do not install the JetBrainsMono Nerd Font
   --skip-config       do not touch shell configuration files
   --no-default-shell  keep bash as the interactive shell (do not start Nushell automatically)
+  --default-shell     start Nushell automatically again (the default on a first install)
   --gnome-terminal    also apply the font and Microverse colours to the default GNOME Terminal profile
   --force             reinstall tools even when the latest version is already installed
   --dry-run           only print what would be downloaded
@@ -71,6 +72,7 @@ while [[ $# -gt 0 ]]; do
     --skip-fonts) DO_FONTS=0 ;;
     --skip-config) DO_CONFIG=0 ;;
     --no-default-shell) DEFAULT_NU=0 ;;
+    --default-shell) DEFAULT_NU=1 ;;
     --gnome-terminal) GNOME_THEME=1 ;;
     --force) FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
@@ -180,35 +182,51 @@ if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 
+backup() { [[ -s "$1" ]] && cp "$1" "$1.tc-backup-$(date +%Y%m%d%H%M%S)"; return 0; }
+
+# Moves <new> over <file>; keeps a backup of <file> only when the content really changes.
+replace_if_changed() {
+  local new=$1 file=$2
+  if [[ -f "$file" ]] && cmp -s "$new" "$file"; then rm -f "$new"; return 0; fi
+  backup "$file"
+  mv "$new" "$file"
+}
+
 copy_configs() {
-  local f src dst
+  local f src dst new updated=0
   for f in "${CONFIG_FILES[@]}"; do
     dst="$TC_HOME/$f"
+    new="$TMP_DIR/config.new"
     mkdir -p "$(dirname "$dst")"
     src="$SCRIPT_DIR/config/$f"
     if [[ -n "$SCRIPT_DIR" && -f "$src" ]]; then
-      cp "$src" "$dst"
+      cp "$src" "$new"
     else
-      curl -fsSL "$REPO_RAW/config/$f" -o "$dst" || die "Could not download config/$f"
+      curl -fsSL "$REPO_RAW/config/$f" -o "$new" || die "Could not download config/$f"
     fi
+    [[ -f "$dst" ]] && ! cmp -s "$new" "$dst" && updated=$((updated + 1))
+    replace_if_changed "$new" "$dst"
   done
-  ok "configs copied to $TC_HOME"
+  if [[ $updated -gt 0 ]]; then
+    ok "configs in $TC_HOME updated ($updated changed file(s); your previous versions are kept as *.tc-backup-*)"
+  else
+    ok "configs in $TC_HOME are up to date"
+  fi
 }
-
-backup() { [[ -f "$1" ]] && cp "$1" "$1.tc-backup-$(date +%Y%m%d%H%M%S)"; return 0; }
 
 # Replaces (or appends) the marked block in <file> with <content>.
 write_block() {
-  local file=$1 content=$2
+  local file=$1 content=$2 new="$1.tc-tmp"
   mkdir -p "$(dirname "$file")"
   touch "$file"
-  if grep -qF "$MARK_BEGIN" "$file"; then
-    backup "$file"
-    awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
-      $0==b {skip=1; next} $0==e {skip=0; next} !skip {print}' "$file" > "$file.tc-tmp"
-    mv "$file.tc-tmp" "$file"
-  fi
-  printf '\n%s\n' "$content" >> "$file"
+  # Drop the old block and trailing blank lines, then append the new block.
+  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+    $0==b {skip=1; next} $0==e {skip=0; next} skip {next}
+    /^[[:space:]]*$/ {blank=blank $0 "\n"; next}
+    {printf "%s%s\n", blank, $0; blank=""}' "$file" > "$new"
+  [[ -s "$new" ]] && printf '\n' >> "$new"
+  printf '%s\n' "$content" >> "$new"
+  replace_if_changed "$new" "$file"
 }
 
 setup_bash() {
@@ -224,12 +242,13 @@ setup_bash() {
 $MARK_END"
   ok "$HOME/.bashrc sources the bash config"
 
-  if [[ $DEFAULT_NU == 1 ]]; then
-    rm -f "$TC_HOME/no-nu"
-    ok "Nushell starts automatically in new terminals (TC_NO_NU=1 bash to skip once)"
+  # Only change the default shell when asked; re-runs and upgrades keep the current choice.
+  [[ $DEFAULT_NU == 1 ]] && rm -f "$TC_HOME/no-nu"
+  [[ $DEFAULT_NU == 0 ]] && touch "$TC_HOME/no-nu"
+  if [[ -e "$TC_HOME/no-nu" ]]; then
+    ok "bash stays the interactive shell (install.sh --default-shell starts Nushell automatically)"
   else
-    touch "$TC_HOME/no-nu"
-    ok "bash stays the interactive shell (delete $TC_HOME/no-nu to start Nushell automatically)"
+    ok "Nushell starts automatically in new terminals (TC_NO_NU=1 bash to skip once)"
   fi
 }
 
@@ -278,7 +297,7 @@ setup_gnome_terminal() {
   gsettings set "$path" use-system-font false
   gsettings set "$path" font 'JetBrainsMono Nerd Font 11'
   gsettings set "$path" use-theme-colors false
-  gsettings set "$path" background-color '#1B1B1B'
+  gsettings set "$path" background-color '#0C0C0C'
   gsettings set "$path" foreground-color '#E6E6E6'
   gsettings set "$path" palette "['#242424', '#F1184C', '#33DD2D', '#FFBB00', '#3A86FF', '#B45CFF', '#2EC4E6', '#D0D0D0', '#6C6C6C', '#FF4D74', '#66F060', '#FFD24D', '#6FA8FF', '#CC8CFF', '#6FDAF2', '#FFFFFF']"
   ok "GNOME Terminal profile $id uses JetBrainsMono Nerd Font + Microverse colours"

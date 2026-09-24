@@ -28,8 +28,10 @@ param(
     [switch]$SkipFonts,
     # Do not touch profiles, Nushell or Windows Terminal settings
     [switch]$SkipConfig,
-    # Keep the current default Windows Terminal profile (do not open Nushell by default)
+    # Do not make Nushell the default Windows Terminal profile on a first install
     [switch]$NoDefaultShell,
+    # Make Nushell the default Windows Terminal profile again (re-runs keep your current choice)
+    [switch]$DefaultShell,
     # Keep PSReadLine/Terminal-Icons modules installed from the PowerShell Gallery
     [switch]$KeepOldModules
 )
@@ -99,19 +101,27 @@ function Write-Utf8File([string]$Path, [string]$Content) {
 }
 
 function Backup-File([string]$Path) {
-    if (Test-Path $Path) { Copy-Item $Path "$Path.tc-backup-$(Get-Date -Format yyyyMMddHHmmss)" -Force }
+    if ((Test-Path $Path) -and (Get-Item $Path).Length -gt 0) {
+        Copy-Item $Path "$Path.tc-backup-$(Get-Date -Format yyyyMMddHHmmss)" -Force
+    }
+}
+
+# Writes the file only when the content changes; keeps a backup of the previous version.
+# Returns $true when the file was changed.
+function Update-FileIfChanged([string]$Path, [string]$Content) {
+    if ((Test-Path $Path) -and [IO.File]::ReadAllText($Path) -ceq $Content) { return $false }
+    Backup-File $Path
+    Write-Utf8File $Path $Content
+    return $true
 }
 
 # Replaces (or appends) the marked block in a text file.
 function Set-MarkedBlock([string]$Path, [string]$Block) {
     $text = if (Test-Path $Path) { [IO.File]::ReadAllText($Path) } else { '' }
-    if ($text.Contains($MarkBegin)) {
-        Backup-File $Path
-        $pattern = '(?s)\r?\n?' + [regex]::Escape($MarkBegin) + '.*?' + [regex]::Escape($MarkEnd)
-        $text = [regex]::Replace($text, $pattern, '')
-    }
-    $text = $text.TrimEnd() + "`r`n`r`n" + $Block.Trim() + "`r`n"
-    Write-Utf8File $Path $text.TrimStart()
+    $pattern = '(?s)\r?\n?' + [regex]::Escape($MarkBegin) + '.*?' + [regex]::Escape($MarkEnd)
+    $text = [regex]::Replace($text, $pattern, '').TrimEnd()
+    if ($text) { $text += "`r`n`r`n" }
+    [void](Update-FileIfChanged $Path ($text + $Block.Trim() + "`r`n"))
 }
 
 # --- prerequisites ---------------------------------------------------------------
@@ -161,19 +171,21 @@ if ($SkipConfig) { Write-Step 'Done (configuration skipped)'; return }
 
 # --- 3. configuration files ------------------------------------------------------------
 Write-Step "Copying configuration to $TcHome"
+$updated = 0
 foreach ($file in $ConfigFiles) {
     $destination = Join-Path $TcHome $file
-    $dir = Split-Path $destination -Parent
-    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $source = if ($PSScriptRoot) { Join-Path $PSScriptRoot "config/$file" } else { $null }
-    if ($source -and (Test-Path $source)) {
-        Copy-Item $source $destination -Force
+    $content = if ($source -and (Test-Path $source)) {
+        [IO.File]::ReadAllText($source)
     } else {
-        Invoke-WebRequest -UseBasicParsing -Uri "$RepoRaw/config/$file" -OutFile $destination
+        (Invoke-WebRequest -UseBasicParsing -Uri "$RepoRaw/config/$file").Content
     }
+    $existed = Test-Path $destination
+    if ((Update-FileIfChanged $destination $content) -and $existed) { $updated++ }
     Unblock-File $destination -ErrorAction SilentlyContinue
 }
-Write-Ok 'configuration copied'
+if ($updated) { Write-Ok "configuration updated ($updated changed file(s); previous versions kept as *.tc-backup-*)" }
+else { Write-Ok 'configuration is up to date' }
 
 # --- 4. PowerShell profiles (PowerShell 7 + Windows PowerShell 5.1, all hosts incl. VS Code) ----
 Write-Step 'Configuring PowerShell profiles'
@@ -252,11 +264,13 @@ if (Test-Command nu) {
 # --- 7. Windows Terminal: profile + colour scheme + default shell --------------------------
 Write-Step 'Configuring Windows Terminal'
 $fragmentDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\TerminalCustomization'
+$firstInstall = -not (Test-Path (Join-Path $fragmentDir 'terminal-customization.json'))
 New-Item -ItemType Directory -Path $fragmentDir -Force | Out-Null
 Copy-Item (Join-Path $TcHome 'windows-terminal/terminal-customization.json') $fragmentDir -Force
 Write-Ok "profile '$WtProfileName' and colour scheme 'Microverse' added"
 
-if (-not $NoDefaultShell) {
+# Only change the default profile on a first install or when asked; re-runs and upgrades keep your choice.
+if ($DefaultShell -or ($firstInstall -and -not $NoDefaultShell)) {
     $settingsFiles = @(
         (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'),
         (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json'),
@@ -266,7 +280,6 @@ if (-not $NoDefaultShell) {
         Write-Warn "Windows Terminal settings not found. Start Windows Terminal once and re-run, or pick '$WtProfileName' in Settings > Startup > Default profile."
     }
     foreach ($settings in $settingsFiles) {
-        Backup-File $settings
         $json = [IO.File]::ReadAllText($settings)
         $entry = '"defaultProfile": "' + $WtProfileName + '"'
         if ($json -match '"defaultProfile"\s*:\s*"[^"]*"') {
@@ -274,7 +287,7 @@ if (-not $NoDefaultShell) {
         } else {
             $json = ([regex]'\{').Replace($json, "{`r`n    $entry,", 1)
         }
-        Write-Utf8File $settings $json
+        [void](Update-FileIfChanged $settings $json)
         Write-Ok "default profile set in $settings"
     }
 }

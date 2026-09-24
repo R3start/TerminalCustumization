@@ -8,6 +8,13 @@
 
 $TcHome = if ($env:TC_HOME) { $env:TC_HOME } else { Join-Path $HOME '.config/terminal-customization' }
 
+# Linux: tools installed by install.sh live in ~/.local/bin
+$TcLocalBin = Join-Path $HOME '.local/bin'
+if (($IsLinux -or $IsMacOS) -and (Test-Path $TcLocalBin) -and
+    -not (($env:PATH -split [IO.Path]::PathSeparator) -contains $TcLocalBin)) {
+    $env:PATH = $TcLocalBin + [IO.Path]::PathSeparator + $env:PATH
+}
+
 function Test-TcCommand([string]$Name) {
     [bool](Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
