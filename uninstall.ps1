@@ -296,5 +296,8 @@ if ($Purge) {
 }
 
 Write-Step 'Done'
-Write-Host '  Open a new terminal window. Backups of edited files are next to them as *.tc-backup-<date>.'
+Write-Host '  Exit this shell (type exit) and open a new terminal window. If you ran this from Nushell or a'
+Write-Host '  PowerShell session hosting Nushell, that session already loaded the oh-my-posh prompt hook and'
+Write-Host '  will keep failing to find it on every prompt until you leave it - expected, not a bug.'
+Write-Host '  Backups of edited files are next to them as *.tc-backup-<date>.'
 Write-Host '  PSReadLine is part of PowerShell and keeps working with its default settings.'

@@ -117,11 +117,14 @@ The installers are safe to run again. A second run only adds what is **missing**
   file in `~/.local/bin` that the installer didn't put there is not overwritten unless you pass `--force`; with
   `--force` it is backed up, and the uninstaller puts it back.
 - **Read before you run:** the one-liners below are convenient. To review a script first, download it, read it,
-  then run it:
+  then run it. These are bash / PowerShell commands. If you're already in **Nushell** (the default shell this
+  repo sets up, on both Windows and Linux), it doesn't support `&&`/`||` as command separators by design — use
+  `;` or `and`, or just run each line on its own, as below:
 
   ```bash
   curl -fsSLO https://raw.githubusercontent.com/R3start/TerminalCustumization/main/install.sh
-  less install.sh && bash install.sh
+  less install.sh
+  bash install.sh
   ```
   ```powershell
   irm https://raw.githubusercontent.com/R3start/TerminalCustumization/main/install.ps1 -OutFile install.ps1
@@ -648,6 +651,8 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 
 ### Manually – Linux
 
+Steps 4-6 below use `&&`; run them in `bash`, not Nushell (type `bash` first if that's your current shell).
+
 1. **bash:** delete the `# >>> terminal-customization >>>` … `# <<< terminal-customization <<<` block from `~/.bashrc`.
 2. **Nushell:** `config nu` → delete the same block. Then:
    ```nu
@@ -678,6 +683,8 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 | Visual Studio Developer PowerShell shows an old prompt / no new tools | Restart Visual Studio so it gets the new PATH. `Get-Command oh-my-posh -All` shows every copy on PATH; uninstall an old one that comes first. |
 | `install.sh` finishes with no errors, but nothing changed (no prompt, `~/.bashrc` untouched) | Fixed: on a machine with no `~/.local/share/fonts` directory yet, an older version of the script died silently right at the font step, before the shell config step ever ran, and still reported success. Re-run `install.sh` (or pull the latest version first). |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
+| `&&` gives a parser error in Nushell (`shell_andand`) | Nushell doesn't support `&&`/`||` as command separators by design; use `;` or `and`, or just run each command on its own line. Applies to any one-liner in this README you paste into Nushell instead of bash/PowerShell. |
+| After `uninstall.sh`/`uninstall.ps1`, every prompt now fails to find oh-my-posh | Expected, not a bug: the shell you ran the uninstaller *from* (Nushell, or PowerShell hosting Nushell) already loaded the oh-my-posh prompt hook before you removed it, and that hook can't un-load itself mid-session. Exit that shell (`exit`) and open a new terminal. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |
 | Windows Terminal: `[error 2147942402 (0x80070002) when launching nu.exe]` | The profile can't find `nu.exe`. Run `install.ps1` again: it points the profile at the full path of `nu.exe`. If Nushell isn't installed, it switches the default profile back to PowerShell and tells you to run `winget install Nushell.Nushell`. By hand: *Settings → Nushell (Microverse) → Command line* → the output of `(Get-Command nu).Source` in quotes. |
 | Nushell prompt has no theme | Oh My Posh needs Nushell ≥ 0.104: upgrade Nushell and re-run the installer. |
