@@ -723,4 +723,4 @@ docs/images/                      screenshots
 
 ## License
 
-[The Unlicense](LICENSE) (public domain)
+[The Unlicense](LICENSE)
