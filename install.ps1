@@ -32,9 +32,9 @@ param(
     [switch]$UpdateFonts,
     # Do not touch profiles, Nushell or Windows Terminal settings
     [switch]$SkipConfig,
-    # Do not make Nushell the default Windows Terminal profile on a first install
+    # Keep PowerShell / your Windows Terminal default: don't start Nushell automatically
     [switch]$NoDefaultShell,
-    # Make Nushell the default Windows Terminal profile again (re-runs keep your current choice)
+    # Start Nushell automatically again (re-runs keep your current choice otherwise)
     [switch]$DefaultShell,
     # Uninstall the PSReadLine/Terminal-Icons copies from the PowerShell Gallery that the previous
     # version of this setup told you to install (they are only reported otherwise)
@@ -72,6 +72,7 @@ $Packages = [ordered]@{
     'muesli.duf'                = 'duf'
     'bootandy.dust'             = 'dust'
     'GitHub.cli'                = 'gh'
+    'chrisant996.Clink'         = 'clink'
 }
 
 $ConfigFiles = @(
@@ -85,6 +86,9 @@ $ConfigFiles = @(
     'fzf/fzfrc'
     'ripgrep/ripgreprc'
     'windows-terminal/terminal-customization.json'
+    'clink/terminal-customization.lua'
+    'clink/z.cmd'
+    'clink/zi.cmd'
 )
 
 # --- output helpers -------------------------------------------------------------
@@ -334,17 +338,25 @@ $set = Get-ExecutionPolicy -List | Where-Object { $_.Scope -ne 'Process' -and $_
 if ($set) { "$($set.Scope)=$($set.ExecutionPolicy)" } else { 'default' }
 '@
 $isClientWindows = try { (Get-CimInstance Win32_OperatingSystem).ProductType -eq 1 } catch { $true }
-foreach ($shell in 'powershell', 'pwsh') {
+# The 32-bit Windows PowerShell (used by Visual Studio's "Developer PowerShell" shortcut) has its own
+# machine-wide policy, so it is checked separately.
+$powershell32 = Join-Path $env:WINDIR 'SysWOW64\WindowsPowerShell\v1.0\powershell.exe'
+$policyShells = @('powershell', 'pwsh')
+if ([Environment]::Is64BitOperatingSystem -and (Test-Path $powershell32)) { $policyShells += $powershell32 }
+foreach ($shell in $policyShells) {
     if (-not (Test-Command $shell)) { continue }
     $ErrorActionPreference = 'Continue'
     $state = ((& $shell -NoLogo -NoProfile -NonInteractive -Command $policyCheck 2>$null) | Out-String).Trim()
     $ErrorActionPreference = 'Stop'
+    $isWindowsPowerShell = $shell -ne 'pwsh'
     $effective = if ($state -eq 'default') {
-        if ($shell -eq 'powershell' -and $isClientWindows) { 'Restricted' } else { 'RemoteSigned' }
+        if ($isWindowsPowerShell -and $isClientWindows) { 'Restricted' } else { 'RemoteSigned' }
     } else { ($state -split '=')[-1] }
+    if ($shell -eq $powershell32) { $shell = 'powershell (32-bit)' }
     if ($effective -notin 'Restricted', 'AllSigned') { continue }
     if ($state -eq 'default' -and -not $KeepExecutionPolicy) {
-        Invoke-Quiet { & $shell -NoLogo -NoProfile -NonInteractive -Command 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' } | Out-Null
+        # The CurrentUser scope is shared by the 32-bit and 64-bit Windows PowerShell.
+        Invoke-Quiet { & powershell -NoLogo -NoProfile -NonInteractive -Command 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force' } | Out-Null
         Write-Ok "${shell}: execution policy for the current user set to RemoteSigned (was the Windows default, Restricted)"
     } else {
         $where = if ($state -eq 'default') { 'Windows default' } else { $state }
@@ -368,6 +380,50 @@ foreach ($shell in 'powershell', 'pwsh') {
     } else {
         Write-Warn "${shell}: $($found -join ', ') from the PowerShell Gallery are no longer used by this setup. Remove them with -RemoveOldModules or: Uninstall-Module PSReadLine, Terminal-Icons -AllVersions"
     }
+}
+
+# Nushell as the default shell: the PowerShell profile hands a normally opened PowerShell window
+# over to Nushell unless ~/.config/terminal-customization/no-nu exists. Only changed when asked.
+$noNuFile = Join-Path $TcHome 'no-nu'
+if ($NoDefaultShell) { New-Item -ItemType File -Path $noNuFile -Force | Out-Null }
+if ($DefaultShell) { Remove-Item $noNuFile -Force -ErrorAction SilentlyContinue }
+if (Test-Path $noNuFile) { Write-Ok 'PowerShell stays PowerShell (install.ps1 -DefaultShell starts Nushell automatically)' }
+else { Write-Ok 'PowerShell windows open Nushell (type powershell inside nu, or set TC_NO_NU=1, for plain PowerShell)' }
+
+# Several oh-my-posh.exe on PATH (an old manual or Store install): the first one wins.
+$ompCopies = @(Get-Command oh-my-posh.exe -All -CommandType Application -ErrorAction SilentlyContinue | ForEach-Object { $_.Source } | Select-Object -Unique)
+if ($ompCopies.Count -gt 1) {
+    Write-Warn "several oh-my-posh.exe are on PATH, the first one is used: $($ompCopies -join ', '). Uninstall the older copy (Settings > Apps) if it is not the winget one."
+}
+
+# --- cmd.exe (incl. Visual Studio "Developer Command Prompt"): Clink -------------------------
+# Clink adds a real line editor to cmd.exe and runs config/clink/terminal-customization.lua in every
+# cmd window: Oh My Posh prompt, ls/ll/la/lt/cat/df/du aliases, z/zi (zoxide).
+Write-Step 'Configuring cmd.exe (Clink)'
+function Find-Clink {
+    $found = Get-Command clink -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { return $found.Source }
+    foreach ($dir in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+        if ($dir -and (Test-Path (Join-Path $dir 'clink\clink.bat'))) { return (Join-Path $dir 'clink\clink.bat') }
+    }
+    return $null
+}
+$clink = Find-Clink
+if (-not $clink) {
+    Write-Warn 'Clink not found, cmd.exe is not configured (winget install chrisant996.Clink, then run this script again)'
+} else {
+    $clinkScripts = Join-Path $TcHome 'clink'
+    Invoke-Quiet { & $clink installscripts $clinkScripts } | Out-Null
+    Add-ManifestEntry 'clink-scripts' $clinkScripts
+    $autorun = @('HKCU:\Software\Microsoft\Command Processor', 'HKLM:\Software\Microsoft\Command Processor') |
+        ForEach-Object { (Get-ItemProperty $_ -Name AutoRun -ErrorAction SilentlyContinue).AutoRun } |
+        Where-Object { $_ -match 'clink' }
+    if (-not $autorun) {
+        Invoke-Quiet { & $clink autorun install -- --quiet } | Out-Null
+        Add-ManifestEntry 'clink-autorun' 'HKCU'
+        Write-Ok 'Clink now starts in every cmd.exe (clink autorun)'
+    }
+    Write-Ok "cmd.exe uses $clinkScripts\terminal-customization.lua (also in the Visual Studio Developer Command Prompt)"
 }
 
 # --- 5. bat theme --------------------------------------------------------------------------
@@ -479,8 +535,26 @@ if (-not $nuExe) {
     }
 }
 
+# Other Windows Terminal profiles (PowerShell, Command Prompt, Visual Studio's Developer PowerShell /
+# Developer Command Prompt, ...) need the Nerd Font for the prompt icons. The font is only set when
+# the profile defaults are still empty ("defaults": {}); your own defaults are never changed.
+foreach ($settings in $settingsFiles) {
+    $json = [IO.File]::ReadAllText($settings)
+    $emptyDefaults = '"defaults"\s*:\s*\{\s*\}'
+    if ($json -match $emptyDefaults) {
+        $json = [regex]::Replace($json, $emptyDefaults, '"defaults": { "font": { "face": "JetBrainsMono Nerd Font" } }', 1)
+        if (Update-FileIfChanged $settings $json) {
+            Add-ManifestEntry 'wt-defaults-font' $settings
+            Write-Ok "all Windows Terminal profiles use JetBrainsMono Nerd Font ($settings)"
+        }
+    } elseif ($json -notmatch 'Nerd Font') {
+        Write-Warn "Windows Terminal: set the font of your other profiles (Settings > Defaults > Appearance > Font face) to 'JetBrainsMono Nerd Font' for the icons."
+    }
+}
+
 # --- done --------------------------------------------------------------------------------
 Write-Step 'Done'
 Write-Host '  Open a new Windows Terminal tab/window to start Nushell with the new prompt.'
-Write-Host "  Other terminals (VS Code, conhost): set the font to 'JetBrainsMono Nerd Font'."
+Write-Host "  Other terminals (VS Code, Visual Studio's terminal, conhost): set the font to 'JetBrainsMono Nerd Font'."
+Write-Host '  Restart Visual Studio (and other programs that were open during the install) so their shells get the new PATH.'
 if ((Test-Command gh) -and (Invoke-Quiet { gh auth status }) -ne 0) { Write-Host "  Run 'gh auth login' to sign in to GitHub." }

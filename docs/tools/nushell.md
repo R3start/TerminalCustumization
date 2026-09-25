@@ -11,10 +11,12 @@ instead of plain text. This setup opens Nushell automatically in every new termi
 
 | OS | Mechanism | How to opt out |
 |----|-----------|----------------|
-| Windows | Windows Terminal profile **Nushell (Microverse)** is set as the default profile | pick another profile in *Settings → Startup → Default profile* (upgrades keep your choice); `install.ps1 -DefaultShell` switches back to Nushell |
+| Windows | Windows Terminal profile **Nushell (Microverse)** is set as the default profile, and a PowerShell window opened normally hands over to `nu` (the PowerShell profile runs it) | `install.ps1 -NoDefaultShell` (PowerShell stays PowerShell), `$env:TC_NO_NU=1` for one session, or pick another Terminal profile in *Settings → Startup → Default profile*; `install.ps1 -DefaultShell` switches back |
 | Linux | `~/.bashrc` hands off to `nu` for interactive terminals (`exec nu`) | `TC_NO_NU=1 bash` for one session; `install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`) permanently; `--default-shell` switches back |
 
-Typing `bash` or `pwsh` inside Nushell gives you that shell (no loop); `exit` returns to Nushell.
+Typing `bash`, `pwsh` or `powershell` inside Nushell gives you that shell (no loop); `exit` returns to Nushell.
+PowerShell started to run something (`-Command`, `-File`: the Visual Studio Developer PowerShell, VS Code, scripts) never
+switches to Nushell.
 Your login shell stays bash, so scripts and system tools are not affected.
 
 ## Install

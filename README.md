@@ -21,6 +21,7 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 - [One-click install](#one-click-install)
 - [Manual installation – Windows](#manual-installation--windows)
 - [Manual installation – Linux](#manual-installation--linux)
+- [Visual Studio 2026 developer shells](#visual-studio-2026-developer-shells)
 - [Upgrading](#upgrading) · [Uninstalling](#uninstalling) · [Troubleshooting](#troubleshooting)
 - [Tool guides](docs/tools/README.md)
 
@@ -64,6 +65,10 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 | `cat` | bat | all |
 | `df` / `du` | duf / dust | all (Nushell keeps its own `du`) |
 | `rgf <pattern>` | ripgrep + fzf, opens the match in VS Code | PowerShell |
+
+In **cmd.exe** (including the Visual Studio Developer Command Prompt), [Clink](https://github.com/chrisant996/clink) provides
+the Oh My Posh prompt, the `ls`/`ll`/`la`/`lt`/`cat`/`df`/`du` aliases and `z`/`zi`. Its own history search is `Ctrl+R`
+and `F7`.
 
 ## One-click install
 
@@ -134,23 +139,31 @@ Options (from a clone, or with `& ([scriptblock]::Create((irm <url>))) -Option`)
 | `-SkipFonts` | don't install the Nerd Font |
 | `-UpdateFonts` | reinstall the font even if it is already installed |
 | `-SkipConfig` | only install tools and font |
-| `-NoDefaultShell` | first install: keep your current default Windows Terminal profile |
-| `-DefaultShell` | make **Nushell (Microverse)** the default profile again (re-runs don't touch it otherwise) |
+| `-NoDefaultShell` | don't start Nushell automatically: PowerShell windows stay PowerShell, and on a first install your default Windows Terminal profile is kept |
+| `-DefaultShell` | start Nushell automatically again: PowerShell windows open Nushell and **Nushell (Microverse)** becomes the default profile (re-runs keep your choice otherwise) |
 | `-RemoveOldModules` | uninstall the PSReadLine/Terminal-Icons copies from the PowerShell Gallery that the old setup used (otherwise only reported) |
 | `-KeepExecutionPolicy` | never change the execution policy, only report when it blocks the profile |
 
 What it does:
 1. Installs the missing ones of Windows Terminal, PowerShell 7, Oh My Posh, Nushell, eza, bat, ripgrep, fzf,
-   zoxide, duf, dust and gh with `winget install`. Packages winget already manages get `winget upgrade`.
+   zoxide, duf, dust, gh and Clink with `winget install`. Packages winget already manages get `winget upgrade`.
 2. Runs `oh-my-posh font install JetBrainsMono` if the font isn't installed yet.
 3. Copies `config/` to `%USERPROFILE%\.config\terminal-customization`.
 4. Adds one line to `Documents\PowerShell\profile.ps1` and `Documents\WindowsPowerShell\profile.ps1`.
    Those profiles apply to all hosts, including the VS Code terminal. It also disables the old
    PSReadLine/Terminal-Icons/oh-my-posh/zoxide statements in all profile files. If the profile can't run because of the
    execution policy, the policy is changed only if it is the untouched Windows default (see [Security](#security)).
-5. Configures Nushell and the bat theme.
+   A PowerShell window opened normally (Start menu, a PowerShell tab) then **switches to Nushell**, like bash on Linux.
+   PowerShell started to run something (`-Command`, `-File`: the Visual Studio Developer PowerShell, VS Code, scripts)
+   stays PowerShell, and so does `powershell` typed inside Nushell. `TC_NO_NU=1` or `-NoDefaultShell` turn it off.
+   The profile also adds missing machine/user PATH entries. A window opened by a program that was already running during
+   the install (Visual Studio, an old Explorer) still finds the new tools.
+5. Configures Nushell, the bat theme and **cmd.exe**: Clink autorun and the
+   [`terminal-customization.lua`](config/clink/terminal-customization.lua) script.
 6. Adds a **Nushell (Microverse)** Windows Terminal profile with the Microverse colour scheme and the Nerd Font,
-   and makes it the default profile (first install only, or with `-DefaultShell`).
+   and makes it the default profile (first install only, or with `-DefaultShell`). If the profile defaults in
+   `settings.json` are still empty, it also sets the Nerd Font for all other profiles (PowerShell, Command Prompt,
+   the Visual Studio developer shells).
 
 ### Linux (x86_64 / aarch64, any distribution)
 
@@ -319,7 +332,22 @@ Without the fragment, you can add a profile by hand: *Settings → Add a new pro
 VS Code: add `"terminal.integrated.defaultProfile.windows": "Nushell"` and a profile entry
 `"terminal.integrated.profiles.windows": { "Nushell": { "path": "nu.exe" } }`.
 
-### 9. GitHub CLI
+PowerShell windows switch to Nushell through the profile from step 5. To keep PowerShell instead, create an empty
+`%USERPROFILE%\.config\terminal-customization\no-nu` file (or set the environment variable `TC_NO_NU=1`).
+
+### 9. cmd.exe and the Developer Command Prompt (Clink)
+
+```powershell
+winget install chrisant996.Clink --source winget
+$clink = "${env:ProgramFiles(x86)}\clink\clink.bat"          # where the Clink setup installs it
+& $clink autorun install -- --quiet                           # start Clink in every cmd.exe
+& $clink installscripts "$HOME\.config\terminal-customization\clink"
+```
+
+Open a new Command Prompt. [`terminal-customization.lua`](config/clink/terminal-customization.lua) loads the prompt, the
+aliases and `z`/`zi` ([`z.cmd`](config/clink/z.cmd), [`zi.cmd`](config/clink/zi.cmd)).
+
+### 10. GitHub CLI
 
 ```powershell
 gh auth login
@@ -463,6 +491,22 @@ gh auth login
 
 ---
 
+## Visual Studio 2026 developer shells
+
+Visual Studio's **Developer PowerShell** and **Developer Command Prompt** (Start menu, *Tools → Command Line*, the Visual
+Studio terminal, and their Windows Terminal profiles) get the same setup:
+
+- **Developer PowerShell** loads the PowerShell profile: Oh My Posh prompt, eza/bat/duf/dust aliases, fzf helpers,
+  zoxide. It stays PowerShell and doesn't switch to Nushell: Visual Studio starts it with `-Command Enter-VsDevShell …`,
+  and switching would lose the build environment. Its Start-menu shortcut uses the 32-bit Windows PowerShell, which has
+  its own execution policy; the installer checks that one too.
+- **Developer Command Prompt** is `cmd.exe` with Clink: Oh My Posh prompt, `ls`/`ll`/`la`/`lt`/`cat`/`df`/`du`, `z`/`zi`.
+- **Restart Visual Studio after installing.** It passes the PATH it started with to every shell it opens. The PowerShell
+  profile adds the missing entries itself. The Command Prompt only sees the new tools after a restart.
+- **Font:** Windows Terminal profiles get the Nerd Font through the profile defaults (see step 6 above). For Visual
+  Studio's own terminal, choose *Tools → Options → Environment → Fonts and Colors → Show settings for: Terminal* →
+  **JetBrainsMono Nerd Font**.
+
 ## Upgrading
 
 Every tool is upgraded to its **latest release**, the JetBrainsMono Nerd Font is refreshed and the
@@ -537,6 +581,8 @@ The scripts show what they will remove and ask for confirmation (`-Yes` / `--yes
   (each edited file is backed up as `*.tc-backup-<date>` first);
 - the Nushell autoload scripts, the bat **Microverse** theme and `~/.config/terminal-customization`;
 - Windows: the **Nushell (Microverse)** Windows Terminal profile. If it was the default, PowerShell becomes the default again;
+- Windows: the Clink script registration and the Clink autorun (only if the installer turned it on), and the Nerd Font
+  profile default in Windows Terminal (only if the installer set it);
 - the tools **the installer installed**, as listed in its install record (see [Security](#security)).
   On Windows that is `winget uninstall` of the packages it installed; Windows Terminal and PowerShell 7 are always
   kept. On Linux it deletes the binaries it put in `~/.local/bin`, keeps any it finds you changed since, and puts
@@ -574,7 +620,9 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
        ForEach-Object { winget uninstall --id $_ --exact }
    ```
 6. **Font:** *Settings → Personalization → Fonts* → search "JetBrainsMono" → each **JetBrainsMono Nerd Font** entry → *Uninstall*.
-7. **Configuration:** `Remove-Item -Recurse "$HOME\.config\terminal-customization"`.
+7. **cmd.exe:** `clink uninstallscripts "$HOME\.config\terminal-customization\clink"`, and
+   `clink autorun uninstall` if you don't want Clink in cmd.exe any more. Then `winget uninstall chrisant996.Clink`.
+8. **Configuration:** `Remove-Item -Recurse "$HOME\.config\terminal-customization"`.
 
 ### Manually – Linux
 
@@ -598,7 +646,9 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 | Squares or `?` instead of icons | Select **JetBrainsMono Nerd Font** in the terminal settings. On WSL/SSH, install the font on the machine running the terminal. |
 | `command not found` right after installing | Open a new terminal. On Linux, check that `~/.local/bin` is in `PATH`. |
 | PowerShell: "running scripts is disabled" | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: pick another default profile in Windows Terminal. |
+| Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: `.\install.ps1 -SkipTools -SkipFonts -NoDefaultShell` and pick another default profile in Windows Terminal. |
+| A PowerShell window doesn't switch to Nushell | Only a normally opened PowerShell switches, not one started with `-Command`/`-File`. Check that `TC_NO_NU` isn't set and that `%USERPROFILE%\.config\terminal-customization\no-nu` doesn't exist. `Get-Command nu` must find Nushell. |
+| Visual Studio Developer PowerShell shows an old prompt / no new tools | Restart Visual Studio so it gets the new PATH. `Get-Command oh-my-posh -All` shows every copy on PATH; uninstall an old one that comes first. |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |
 | Windows Terminal: `[error 2147942402 (0x80070002) when launching nu.exe]` | The profile can't find `nu.exe`. Run `install.ps1` again: it points the profile at the full path of `nu.exe`. If Nushell isn't installed, it switches the default profile back to PowerShell and tells you to run `winget install Nushell.Nushell`. By hand: *Settings → Nushell (Microverse) → Command line* → the output of `(Get-Command nu).Source` in quotes. |
@@ -622,6 +672,8 @@ config/
   fzf/fzfrc                              fzf defaults and colours
   ripgrep/ripgreprc                      ripgrep defaults and colours
   windows-terminal/terminal-customization.json   Windows Terminal profile + colour scheme
+  clink/terminal-customization.lua       cmd.exe (Clink): prompt, aliases, zoxide
+  clink/z.cmd, clink/zi.cmd              z / zi for cmd.exe
 docs/tools/                       one usage guide per tool
 docs/images/                      screenshots
 ```

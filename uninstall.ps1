@@ -46,7 +46,8 @@ $WtProfileGuid = '{7c3e2a5b-4d1f-4b8e-9a6c-2f5d8e1b3a74}'
 $StateDir = Join-Path $env:LOCALAPPDATA 'terminal-customization'
 $Manifest = Join-Path $StateDir 'manifest.txt'
 $WingetTools = 'JanDeDobbeleer.OhMyPosh', 'Nushell.Nushell', 'eza-community.eza', 'sharkdp.bat',
-    'BurntSushi.ripgrep.MSVC', 'junegunn.fzf', 'ajeetdsouza.zoxide', 'muesli.duf', 'bootandy.dust', 'GitHub.cli'
+    'BurntSushi.ripgrep.MSVC', 'junegunn.fzf', 'ajeetdsouza.zoxide', 'muesli.duf', 'bootandy.dust', 'GitHub.cli',
+    'chrisant996.Clink'
 # Well-known Windows Terminal profile GUIDs
 $Pwsh7Guid = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
 $WinPsGuid = '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}'
@@ -176,6 +177,37 @@ foreach ($settings in $settingsFiles) {
         Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaultProfile": "' + $fallback + '"'))
         Write-Ok "default profile set back to PowerShell in $settings"
     }
+}
+
+# --- Windows Terminal font default and cmd.exe (Clink) -----------------------------------------
+foreach ($settings in Get-ManifestEntries 'wt-defaults-font') {
+    if (-not (Test-Path $settings)) { continue }
+    $json = [IO.File]::ReadAllText($settings)
+    $ours = '"defaults"\s*:\s*\{\s*"font"\s*:\s*\{\s*"face"\s*:\s*"JetBrainsMono Nerd Font"\s*\}\s*\}'
+    if ($json -match $ours) {
+        Backup-File $settings
+        Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaults": {}', 1))
+        Write-Ok "Windows Terminal profile defaults restored in $settings"
+    }
+}
+Remove-ManifestEntries 'wt-defaults-font'
+
+$clinkScripts = @(Get-ManifestEntries 'clink-scripts')
+$clinkAutorun = @(Get-ManifestEntries 'clink-autorun')
+if ($clinkScripts -or $clinkAutorun) {
+    $clink = Get-Command clink -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { $_.Source }
+    if (-not $clink) {
+        foreach ($dir in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+            if ($dir -and (Test-Path (Join-Path $dir 'clink\clink.bat'))) { $clink = Join-Path $dir 'clink\clink.bat'; break }
+        }
+    }
+    if ($clink) {
+        foreach ($dir in $clinkScripts) { Invoke-Quiet { & $clink uninstallscripts $dir } | Out-Null }
+        if ($clinkAutorun) { Invoke-Quiet { & $clink autorun uninstall } | Out-Null; Write-Ok 'Clink no longer starts with cmd.exe' }
+        Write-Ok 'cmd.exe configuration (Clink script) removed'
+    }
+    Remove-ManifestEntries 'clink-scripts'
+    Remove-ManifestEntries 'clink-autorun'
 }
 
 # --- fonts (before the tools, so nothing is holding them) -------------------------------------
