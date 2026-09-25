@@ -6,6 +6,10 @@
 # PSReadLine is intentionally not configured; history search, file search and
 # directory jumping are provided by fzf and zoxide instead.
 
+# Load once per session: the installer adds this to both $PROFILE and profile.ps1.
+if ($global:TcProfileLoaded) { return }
+$global:TcProfileLoaded = $true
+
 $TcHome = if ($env:TC_HOME) { $env:TC_HOME } else { Join-Path $HOME '.config/terminal-customization' }
 
 # Linux: tools installed by install.sh live in ~/.local/bin

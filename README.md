@@ -149,7 +149,9 @@ What it does:
    zoxide, duf, dust, gh and Clink with `winget install`. Packages winget already manages get `winget upgrade`.
 2. Runs `oh-my-posh font install JetBrainsMono` if the font isn't installed yet.
 3. Copies `config/` to `%USERPROFILE%\.config\terminal-customization`.
-4. Adds one line to `Documents\PowerShell\profile.ps1` and `Documents\WindowsPowerShell\profile.ps1`.
+4. Adds one line to the end of `$PROFILE` (`Microsoft.PowerShell_profile.ps1`, the file PowerShell consoles load) and
+   to `profile.ps1` (all hosts, e.g. VS Code), for PowerShell 7 and Windows PowerShell 5.1. The paths are asked from
+   PowerShell itself, so a moved or OneDrive-redirected Documents folder is handled, and the setup loads only once.
    Those profiles apply to all hosts, including the VS Code terminal. It also disables the old
    PSReadLine/Terminal-Icons/oh-my-posh/zoxide statements in all profile files. If the profile can't run because of the
    execution policy, the policy is changed only if it is the untouched Windows default (see [Security](#security)).
@@ -261,14 +263,15 @@ Copy-Item -Recurse -Force .\TerminalCustumization\config "$HOME\.config\terminal
 
 Allow local scripts once: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
-Open the profile for all hosts (`notepad $PROFILE.CurrentUserAllHosts`; create it with
-`New-Item -Force $PROFILE.CurrentUserAllHosts` if it doesn't exist) and add:
+Open your profile (`notepad $PROFILE`, usually `Documents\PowerShell\Microsoft.PowerShell_profile.ps1`; create it with
+`New-Item -Force $PROFILE` if it doesn't exist) and add this line **at the end**:
 
 ```powershell
 . "$HOME\.config\terminal-customization\powershell\profile.ps1"
 ```
 
-Do this in both PowerShell 7 and Windows PowerShell 5.1 if you use both.
+Do this in both PowerShell 7 and Windows PowerShell 5.1 if you use both. For VS Code's PowerShell terminal, add the same
+line to `$PROFILE.CurrentUserAllHosts`. The setup loads only once even when several profile files include it.
 Remove any old `Import-Module PSReadLine`, `Set-PSReadLineOption`, `Import-Module Terminal-Icons` and
 `oh-my-posh init` lines from `$PROFILE`. To also remove the modules the old setup installed:
 
@@ -648,6 +651,7 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 | PowerShell: "running scripts is disabled" | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 | Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: `.\install.ps1 -SkipTools -SkipFonts -NoDefaultShell` and pick another default profile in Windows Terminal. |
 | A PowerShell window doesn't switch to Nushell | Only a normally opened PowerShell switches, not one started with `-Command`/`-File`. Check that `TC_NO_NU` isn't set and that `%USERPROFILE%\.config\terminal-customization\no-nu` doesn't exist. `Get-Command nu` must find Nushell. |
+| PowerShell shows the old prompt | Run `Get-Content $PROFILE`. Old `oh-my-posh init …` lines outside the `terminal-customization` block should be commented out (`# disabled by terminal-customization`), and the block should be the last thing in the file. Re-run `install.ps1` if it isn't. |
 | Visual Studio Developer PowerShell shows an old prompt / no new tools | Restart Visual Studio so it gets the new PATH. `Get-Command oh-my-posh -All` shows every copy on PATH; uninstall an old one that comes first. |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |

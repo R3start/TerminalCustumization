@@ -101,6 +101,27 @@ function Remove-ManifestEntries([string]$Kind) {
     if ($keep) { Set-Content -Path $Manifest -Value $keep -Encoding UTF8 } else { Remove-Item $Manifest -Force }
 }
 
+# The profile files each PowerShell edition really loads, asked from the shell itself (so a moved or
+# OneDrive-redirected Documents folder is handled). Falls back to the usual Documents paths.
+function Get-PowerShellProfiles {
+    $documents = [Environment]::GetFolderPath('MyDocuments')
+    if (-not $documents) { $documents = Join-Path $HOME 'Documents' }
+    foreach ($edition in @(@{ Shell = 'pwsh'; Folder = 'PowerShell' }, @{ Shell = 'powershell'; Folder = 'WindowsPowerShell' })) {
+        $paths = @()
+        if (Get-Command $edition.Shell -ErrorAction SilentlyContinue) {
+            $ErrorActionPreference = 'Continue'
+            $paths = @(& $edition.Shell -NoLogo -NoProfile -NonInteractive -Command '$PROFILE.CurrentUserCurrentHost; $PROFILE.CurrentUserAllHosts' 2>$null |
+                ForEach-Object { "$_".Trim() } | Where-Object { $_ -match '\.ps1$' })
+            $ErrorActionPreference = 'Stop'
+        }
+        if ($paths.Count -ne 2) {
+            $dir = Join-Path $documents $edition.Folder
+            $paths = @((Join-Path $dir 'Microsoft.PowerShell_profile.ps1'), (Join-Path $dir 'profile.ps1'))
+        }
+        [pscustomobject]@{ Edition = $edition.Folder; CurrentHost = $paths[0]; AllHosts = $paths[1] }
+    }
+}
+
 function Remove-IfExists([string]$Path) {
     if (Test-Path $Path) { Remove-Item $Path -Recurse -Force; Write-Ok "removed $Path" }
 }
@@ -126,10 +147,10 @@ if (-not $Yes) {
 
 # --- shells ------------------------------------------------------------------------------
 Write-Step 'Removing shell integration'
-$documents = [Environment]::GetFolderPath('MyDocuments')
-foreach ($edition in 'PowerShell', 'WindowsPowerShell') {
-    $path = Join-Path $documents "$edition\profile.ps1"
-    if (Remove-MarkedBlock $path) { Write-Ok $path }
+foreach ($profiles in Get-PowerShellProfiles) {
+    foreach ($path in @($profiles.CurrentHost, $profiles.AllHosts)) {
+        if (Remove-MarkedBlock $path) { Write-Ok $path }
+    }
 }
 Write-Host '  Lines the installer commented out ("# disabled by terminal-customization:") are left as they are.' -ForegroundColor DarkGray
 

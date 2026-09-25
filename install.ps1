@@ -213,6 +213,27 @@ function Test-NerdFontInstalled {
     return $false
 }
 
+# The profile files each PowerShell edition really loads, asked from the shell itself (so a moved or
+# OneDrive-redirected Documents folder is handled). Falls back to the usual Documents paths.
+function Get-PowerShellProfiles {
+    $documents = [Environment]::GetFolderPath('MyDocuments')
+    if (-not $documents) { $documents = Join-Path $HOME 'Documents' }
+    foreach ($edition in @(@{ Shell = 'pwsh'; Folder = 'PowerShell' }, @{ Shell = 'powershell'; Folder = 'WindowsPowerShell' })) {
+        $paths = @()
+        if (Get-Command $edition.Shell -ErrorAction SilentlyContinue) {
+            $ErrorActionPreference = 'Continue'
+            $paths = @(& $edition.Shell -NoLogo -NoProfile -NonInteractive -Command '$PROFILE.CurrentUserCurrentHost; $PROFILE.CurrentUserAllHosts' 2>$null |
+                ForEach-Object { "$_".Trim() } | Where-Object { $_ -match '\.ps1$' })
+            $ErrorActionPreference = 'Stop'
+        }
+        if ($paths.Count -ne 2) {
+            $dir = Join-Path $documents $edition.Folder
+            $paths = @((Join-Path $dir 'Microsoft.PowerShell_profile.ps1'), (Join-Path $dir 'profile.ps1'))
+        }
+        [pscustomobject]@{ Edition = $edition.Folder; CurrentHost = $paths[0]; AllHosts = $paths[1] }
+    }
+}
+
 # Replaces (or appends) the marked block in a text file.
 function Set-MarkedBlock([string]$Path, [string]$Block) {
     $text = if (Test-Path $Path) { [IO.File]::ReadAllText($Path) } else { '' }
@@ -310,9 +331,11 @@ foreach ($file in $ConfigFiles) {
 if ($updated) { Write-Ok "configuration updated ($updated changed file(s); previous versions kept as *.tc-backup-*)" }
 else { Write-Ok 'configuration is up to date' }
 
-# --- 4. PowerShell profiles (PowerShell 7 + Windows PowerShell 5.1, all hosts incl. VS Code) ----
+# --- 4. PowerShell profiles (PowerShell 7 + Windows PowerShell 5.1) ------------------------------
+# The block goes into $PROFILE (Microsoft.PowerShell_profile.ps1, what the consoles load, appended last
+# so it wins over anything earlier in the file) and into profile.ps1 (all hosts, e.g. VS Code).
+# The profile only loads once per session, so having it in both costs nothing.
 Write-Step 'Configuring PowerShell profiles'
-$documents = [Environment]::GetFolderPath('MyDocuments')
 $profileBlock = @"
 $MarkBegin
 . "`$HOME\.config\terminal-customization\powershell\profile.ps1"
@@ -320,13 +343,14 @@ $MarkEnd
 "@
 # Statements from the previous version of this repo (PSReadLine, Terminal-Icons, oh-my-posh), other
 # zoxide init lines and hand-added copies of the line below would load things twice.
-foreach ($edition in 'PowerShell', 'WindowsPowerShell') {
-    $dir = Join-Path $documents $edition
-    foreach ($name in 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1', 'profile.ps1') {
-        Disable-DuplicateProfileStatements (Join-Path $dir $name)
+foreach ($profiles in Get-PowerShellProfiles) {
+    $dir = Split-Path $profiles.CurrentHost -Parent
+    foreach ($file in @($profiles.CurrentHost, $profiles.AllHosts, (Join-Path $dir 'Microsoft.VSCode_profile.ps1')) | Select-Object -Unique) {
+        Disable-DuplicateProfileStatements $file
     }
-    Set-MarkedBlock (Join-Path $dir 'profile.ps1') $profileBlock
-    Write-Ok "$edition profile: $(Join-Path $dir 'profile.ps1')"
+    Set-MarkedBlock $profiles.AllHosts $profileBlock
+    Set-MarkedBlock $profiles.CurrentHost $profileBlock
+    Write-Ok "$($profiles.Edition): $($profiles.CurrentHost) and $(Split-Path $profiles.AllHosts -Leaf)"
 }
 
 # Profiles are local scripts. The only policy this script changes is the untouched Windows client
@@ -557,4 +581,5 @@ Write-Step 'Done'
 Write-Host '  Open a new Windows Terminal tab/window to start Nushell with the new prompt.'
 Write-Host "  Other terminals (VS Code, Visual Studio's terminal, conhost): set the font to 'JetBrainsMono Nerd Font'."
 Write-Host '  Restart Visual Studio (and other programs that were open during the install) so their shells get the new PATH.'
+Write-Host '  Prompt still looks old? Run: Get-Content $PROFILE  - and look for oh-my-posh lines outside the terminal-customization block.'
 if ((Test-Command gh) -and (Invoke-Quiet { gh auth status }) -ne 0) { Write-Host "  Run 'gh auth login' to sign in to GitHub." }
