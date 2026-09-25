@@ -3,8 +3,8 @@
 # Dot-sourced from $PROFILE:
 #   . "$HOME/.config/terminal-customization/powershell/profile.ps1"
 #
-# PSReadLine is intentionally not configured; history search, file search and
-# directory jumping are provided by fzf and zoxide instead.
+# PSReadLine (part of PowerShell) is only used for the fzf key bindings Ctrl+T / Ctrl+R / Alt+C;
+# its predictions and list view are not configured. Run `tc-doctor` to see what loaded.
 
 # Load once per session: the installer adds this to both $PROFILE and profile.ps1.
 if ($global:TcProfileLoaded) { return }
@@ -51,10 +51,17 @@ function Test-TcCommand([string]$Name) {
 # If Nushell fails right away, PowerShell simply continues.
 $TcExtraArgs = @([Environment]::GetCommandLineArgs() | Select-Object -Skip 1 |
     Where-Object { $_ -notmatch '^-(nologo|login|l|interactive|mta|sta)$' })
+$global:TcNushellStatus = if ($env:TC_IN_NU) { 'stays PowerShell: started from Nushell (TC_IN_NU)' }
+    elseif ($env:TC_NO_NU) { 'stays PowerShell: TC_NO_NU is set' }
+    elseif ($TcExtraArgs.Count) { "stays PowerShell: started to run something ($($TcExtraArgs -join ' '))" }
+    elseif (Test-Path (Join-Path $TcHome 'no-nu')) { 'stays PowerShell: no-nu file (install.ps1 -NoDefaultShell)' }
+    elseif ($Host.Name -ne 'ConsoleHost') { "stays PowerShell: host is $($Host.Name)" }
+    else { 'hands over to Nushell' }
 if (-not $env:TC_IN_NU -and -not $env:TC_NO_NU -and $TcExtraArgs.Count -eq 0 -and
     $Host.Name -eq 'ConsoleHost' -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected -and
     -not (Test-Path (Join-Path $TcHome 'no-nu'))) {
     $TcNu = Get-Command nu -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $TcNu) { $global:TcNushellStatus = 'stays PowerShell: nu not found on PATH' }
     if ($TcNu) {
         $env:TC_IN_NU = '1'
         $TcStarted = Get-Date
@@ -65,6 +72,7 @@ if (-not $env:TC_IN_NU -and -not $env:TC_NO_NU -and $TcExtraArgs.Count -eq 0 -an
             [Environment]::Exit([int]$LASTEXITCODE)
         }
         if ($TcRan) { Write-Warning "Nushell exited with code $LASTEXITCODE right after starting; staying in PowerShell." }
+        $global:TcNushellStatus = 'stays PowerShell: Nushell failed to start'
         Remove-Item Env:TC_IN_NU -ErrorAction SilentlyContinue
     }
 }
@@ -151,7 +159,105 @@ if (Test-TcCommand fzf) {
         $file, $line, $null = $hit -split "`t", 3
         if (Test-TcCommand code) { code --goto "${file}:${line}" } else { bat --paging=never --highlight-line $line $file }
     }
+
+    # Ctrl+T / Ctrl+R / Alt+C, like in bash and Nushell (PSReadLine key handlers only).
+    if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
+        # Ctrl+T: pick files (bat preview) and insert them at the cursor
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+t' -BriefDescription 'FzfFiles' -Description 'fzf: insert files' -ScriptBlock {
+            $picked = @(fzf --multi --scheme=path --preview 'bat --color=always --style=numbers --line-range=:300 {}')
+            if ($picked.Count) {
+                $quoted = foreach ($path in $picked) {
+                    if ($path -match "[\s'`"``$&(){}@;,]") { "'" + ($path -replace "'", "''") + "'" } else { $path }
+                }
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert(($quoted -join ' '))
+            }
+            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+        }
+
+        # Ctrl+R: search the command history; the chosen command replaces the line (not run)
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -BriefDescription 'FzfHistory' -Description 'fzf: search history' -ScriptBlock {
+            $line = $null
+            $cursor = $null
+            [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
+            $file = (Get-PSReadLineOption).HistorySavePath
+            $history = @(if ($file -and (Test-Path $file)) { Get-Content $file } else { (Get-History).CommandLine })
+            [array]::Reverse($history)
+            $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+            $unique = foreach ($entry in $history) { if ($entry -and $seen.Add($entry)) { $entry } }
+            $picked = $unique | fzf --no-sort --scheme=history --prompt 'history> ' --query "$line"
+            if ($picked) {
+                [Microsoft.PowerShell.PSConsoleReadLine]::RevertLine()
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert(@($picked)[0])
+            }
+            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+        }
+
+        # Alt+C: pick a directory below the current one (eza tree preview) and cd into it.
+        # fzf's own walker lists directories only while FZF_DEFAULT_COMMAND is unset.
+        Set-PSReadLineKeyHandler -Chord 'Alt+c' -BriefDescription 'FzfCd' -Description 'fzf: cd into a directory' -ScriptBlock {
+            $saved = $env:FZF_DEFAULT_COMMAND
+            $env:FZF_DEFAULT_COMMAND = $null
+            try {
+                $dir = fzf --walker=dir,follow,hidden --scheme=path --preview 'eza --tree --level=2 --icons=always --color=always {}'
+            } finally {
+                $env:FZF_DEFAULT_COMMAND = $saved
+            }
+            if ($dir) { Set-Location -LiteralPath $dir }
+            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+        }
+    }
 }
+
+# --- tc-doctor: what this setup loaded in the current session ------------------
+function Test-TerminalCustomization {
+    "PowerShell $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition)), host: $($Host.Name)"
+    "Command line : $([Environment]::CommandLine)"
+    "Config folder: $TcHome (exists: $(Test-Path $TcHome))"
+    "Nushell      : $global:TcNushellStatus"
+    ''
+    'Profile files ([block] = contains the terminal-customization block):'
+    foreach ($name in 'AllUsersAllHosts', 'AllUsersCurrentHost', 'CurrentUserAllHosts', 'CurrentUserCurrentHost') {
+        $path = $PROFILE.$name
+        $state = if (-not (Test-Path $path)) { 'missing' }
+            elseif (Select-String -Path $path -SimpleMatch '# >>> terminal-customization >>>' -Quiet) { 'exists [block]' }
+            else { 'exists' }
+        '  {0,-23} {1} ({2})' -f $name, $path, $state
+    }
+    ''
+    'Tools (first match on PATH wins):'
+    foreach ($tool in 'oh-my-posh', 'nu', 'eza', 'bat', 'rg', 'fzf', 'zoxide', 'duf', 'dust', 'gh') {
+        $found = @(Get-Command $tool -CommandType Application -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source } | Select-Object -Unique)
+        if (-not $found) { '  {0,-11} NOT FOUND' -f $tool; continue }
+        $version = try {
+            $text = if ($tool -eq 'oh-my-posh') { & $found[0] version 2>$null } else { & $found[0] --version 2>$null }
+            (($text | Out-String) -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
+        } catch { '?' }
+        '  {0,-11} {1}  [{2}]' -f $tool, $found[0], $version
+        foreach ($other in ($found | Select-Object -Skip 1)) { '  {0,-11} also: {1}' -f '', $other }
+    }
+    ''
+    'Commands:'
+    foreach ($name in 'ls', 'll', 'la', 'lt', 'cat', 'df', 'du', 'z', 'zi', 'fe', 'fcd', 'fh', 'rgf') {
+        $cmd = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
+        $what = if (-not $cmd) { 'not defined' }
+            elseif ($cmd.CommandType -eq 'Alias') { "alias -> $($cmd.Definition)" }
+            elseif ($cmd.CommandType -eq 'Function') { 'function: ' + (($cmd.Definition -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()) }
+            else { "$($cmd.CommandType): $($cmd.Source)" }
+        '  {0,-4} {1}' -f $name, $what
+    }
+    ''
+    'Key bindings:'
+    if (Get-Command Get-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
+        $bound = @(Get-PSReadLineKeyHandler -Bound | Where-Object { $_.Key -in 'Ctrl+t', 'Ctrl+r', 'Alt+c' })
+        foreach ($key in 'Ctrl+t', 'Ctrl+r', 'Alt+c') {
+            $handler = $bound | Where-Object { $_.Key -eq $key } | Select-Object -First 1
+            '  {0,-7} {1}' -f $key, $(if ($handler) { $handler.Function } else { 'not bound' })
+        }
+    } else {
+        '  PSReadLine is not loaded in this host'
+    }
+}
+Set-Alias tc-doctor Test-TerminalCustomization
 
 # --- gh: GitHub CLI completion ----------------------------------------------
 if (Test-TcCommand gh) {

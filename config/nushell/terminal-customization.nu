@@ -14,7 +14,9 @@ $env.BAT_THEME = 'Microverse'
 
 # fzf: list files with ripgrep, preview with bat / eza
 $env.FZF_DEFAULT_COMMAND = 'rg --files --hidden --glob "!.git/"'
-$env.FZF_CTRL_T_COMMAND = $env.FZF_DEFAULT_COMMAND
+# fzf's Nushell key bindings run FZF_CTRL_T_COMMAND through `sh -c`, which doesn't exist on Windows.
+# There Ctrl+T uses fzf's built-in walker instead (skips .git, node_modules, ...).
+if $nu.os-info.name != 'windows' { $env.FZF_CTRL_T_COMMAND = $env.FZF_DEFAULT_COMMAND }
 $env.FZF_CTRL_T_OPTS = "--preview 'bat --color=always --style=numbers --line-range=:300 {}'"
 $env.FZF_ALT_C_OPTS = "--preview 'eza --tree --level=2 --icons=always --color=always {}'"
 
