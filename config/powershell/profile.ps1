@@ -36,6 +36,15 @@ if ($env:OS -eq 'Windows_NT') {
     Remove-Variable TcCurrentPath, TcMissing
 }
 
+# Windows: a standalone console window (Developer PowerShell/Command Prompt shortcuts, plain
+# "Windows PowerShell", conhost in general) starts on the system OEM codepage, not UTF-8. bat, eza
+# and the oh-my-posh prompt write UTF-8 box-drawing/icon glyphs, so under the wrong codepage those
+# come out as mojibake (e.g. "Γöé" instead of a single "│"). This also carries over to Nushell when
+# PowerShell hands off to it below, since the codepage belongs to the console, not the process.
+if ($env:OS -eq 'Windows_NT' -and $Host.Name -eq 'ConsoleHost') {
+    try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+}
+
 function Test-TcCommand([string]$Name) {
     [bool](Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
