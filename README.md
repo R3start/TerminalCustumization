@@ -62,7 +62,8 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 | `Alt+C` | fuzzy `cd` into a sub-directory | bash, Nushell, PowerShell |
 | `tc-doctor` | shows what the setup loaded in this session (profiles, tools, aliases, key bindings) | PowerShell |
 | `z <name>` / `zi` | jump to a frequently used directory | all |
-| `ls`, `ll`, `la`, `lt` | eza: list, long, long + hidden, tree | all (Nushell keeps its own `ls`; use `l`) |
+| `ll`, `la`, `lt` | eza: long, long + hidden, tree | all |
+| `ls` / `l` | native listing / eza icons | bash, cmd.exe: `ls` is eza. Nushell, PowerShell: `ls` stays native (structured, pipeable), use `l` for eza |
 | `cat` | bat | all |
 | `df` / `du` | duf / dust | all (Nushell keeps its own `du`) |
 | `rgf <pattern>` | ripgrep + fzf, opens the match in VS Code | PowerShell |
@@ -293,7 +294,7 @@ $env:EZA_CONFIG_DIR        = "$HOME\.config\terminal-customization\eza"
 $env:FZF_DEFAULT_OPTS_FILE = "$HOME\.config\terminal-customization\fzf\fzfrc"
 $env:RIPGREP_CONFIG_PATH   = "$HOME\.config\terminal-customization\ripgrep\ripgreprc"
 $env:BAT_THEME             = 'Microverse'
-Remove-Item Alias:ls -Force; function ls { eza --icons=auto --group-directories-first @args }
+function l { eza --icons=auto --group-directories-first @args }   # ls stays native Get-ChildItem
 Remove-Item Alias:cat -Force; function cat { bat --paging=never @args }
 function df { duf @args }; function du { dust @args }
 gh completion -s powershell | Out-String | Invoke-Expression

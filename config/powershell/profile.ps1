@@ -94,9 +94,10 @@ if (Test-TcCommand oh-my-posh) {
 }
 
 # --- eza: modern ls (replaces Terminal-Icons) -------------------------------
+# ls stays PowerShell's native Get-ChildItem (structured objects, pipeable), like Nushell keeps
+# its own ls; use l for eza's colourful listing, same split as Nushell's ls/l.
 if (Test-TcCommand eza) {
-    Remove-Item Alias:ls -Force -ErrorAction SilentlyContinue
-    function ls { eza --icons=auto --group-directories-first @args }
+    function l { eza --icons=auto --group-directories-first @args }
     function ll { eza --icons=auto --group-directories-first --long --header --git @args }
     function la { eza --icons=auto --group-directories-first --long --header --git --all @args }
     function lt { eza --icons=auto --group-directories-first --tree --level=2 @args }
@@ -237,7 +238,7 @@ function Test-TerminalCustomization {
     }
     ''
     'Commands:'
-    foreach ($name in 'ls', 'll', 'la', 'lt', 'cat', 'df', 'du', 'z', 'zi', 'fe', 'fcd', 'fh', 'rgf') {
+    foreach ($name in 'ls', 'l', 'll', 'la', 'lt', 'cat', 'df', 'du', 'z', 'zi', 'fe', 'fcd', 'fh', 'rgf') {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
         $what = if (-not $cmd) { 'not defined' }
             elseif ($cmd.CommandType -eq 'Alias') { "alias -> $($cmd.Definition)" }
