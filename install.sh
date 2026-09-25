@@ -512,7 +512,7 @@ setup_gnome_terminal() {
   [[ -n "$id" ]] || { warn "GNOME Terminal has no default profile"; return 0; }
   path="org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$id/"
   gsettings set "$path" use-system-font false
-  gsettings set "$path" font 'JetBrainsMono NFM 11'
+  gsettings set "$path" font 'JetBrainsMono Nerd Font Mono 11'
   gsettings set "$path" use-theme-colors false
   gsettings set "$path" background-color '#0C0C0C'
   gsettings set "$path" foreground-color '#E6E6E6'
@@ -539,7 +539,7 @@ fi
 
 font_installed() {
   if has fc-list; then
-    fc-list : family 2>/dev/null | grep -qi 'JetBrainsMono NFM'
+    fc-list : family 2>/dev/null | grep -qi 'JetBrainsMono Nerd Font Mono'
   else
     find "$HOME/.local/share/fonts" /usr/share/fonts /usr/local/share/fonts -name 'JetBrainsMono*NerdFont*' \
       -print -quit 2>/dev/null | grep -q .
@@ -570,7 +570,7 @@ if [[ $DO_FONTS == 1 ]]; then
       has fc-cache && fc-cache -f >/dev/null 2>&1 || true
       # Record only the files this run added (a font you installed yourself is never recorded).
       font_files | comm -13 "$TMP_DIR/fonts.before" - | while IFS= read -r f; do manifest_set font "$f"; done
-      ok "font installed - select 'JetBrainsMono NFM' in your terminal settings"
+      ok "font installed - select 'JetBrainsMono Nerd Font Mono' in your terminal settings"
     else
       warn "font installation failed; see README 'Fonts' for the manual steps"
     fi
