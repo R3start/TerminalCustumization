@@ -234,7 +234,9 @@ if [[ $PURGE == 1 ]]; then
 fi
 
 step "Done"
-echo "  Open a new terminal to get your previous bash setup back."
+echo "  Exit this shell (type 'exit') and open a new terminal to get your previous bash setup back."
+echo "  If you ran this from Nushell or PowerShell, that session already loaded the oh-my-posh prompt"
+echo "  hook and will keep failing to find it on every prompt until you leave it - expected, not a bug."
 echo "  Backups of edited files are next to them as *.tc-backup-<date>."
 exit 0
 }
