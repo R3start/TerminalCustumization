@@ -296,8 +296,19 @@ if ($Purge) {
 }
 
 Write-Step 'Done'
-Write-Host '  Exit this shell (type exit) and open a new terminal window. If you ran this from Nushell or a'
-Write-Host '  PowerShell session hosting Nushell, that session already loaded the oh-my-posh prompt hook and'
-Write-Host '  will keep failing to find it on every prompt until you leave it - expected, not a bug.'
 Write-Host '  Backups of edited files are next to them as *.tc-backup-<date>.'
+# Whatever shell you ran this from already has the oh-my-posh prompt hook loaded in memory and
+# would keep failing to find it on every prompt, since a running session can't un-load a hook.
+# Unlike uninstall.sh, a Windows script has no way to replace its own process in place, so the
+# closest equivalent is opening a fresh console and closing this one - only when there's a real
+# interactive console to do that for (not a CI/non-interactive invocation).
+$isRealConsole = $Host.Name -eq 'ConsoleHost' -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected
+if ($isRealConsole) {
+    Write-Host '  Opening a fresh PowerShell window; close this one (or it will keep failing to find oh-my-posh).'
+    Start-Process -FilePath (Get-Process -Id $PID).Path
+    [Environment]::Exit(0)
+}
+Write-Host '  Open a new terminal window to get your previous PowerShell setup back.'
+Write-Host '  If you ran this from Nushell or a PowerShell session hosting Nushell, that session already'
+Write-Host '  loaded the oh-my-posh prompt hook and will keep failing to find it until you leave it.'
 Write-Host '  PSReadLine is part of PowerShell and keeps working with its default settings.'

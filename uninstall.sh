@@ -234,9 +234,15 @@ if [[ $PURGE == 1 ]]; then
 fi
 
 step "Done"
-echo "  Exit this shell (type 'exit') and open a new terminal to get your previous bash setup back."
-echo "  If you ran this from Nushell or PowerShell, that session already loaded the oh-my-posh prompt"
-echo "  hook and will keep failing to find it on every prompt until you leave it - expected, not a bug."
 echo "  Backups of edited files are next to them as *.tc-backup-<date>."
+# Whatever shell you ran this from (Nushell, or a bash/PowerShell session that already sourced the
+# old setup) already loaded the oh-my-posh prompt hook and would keep failing to find it on every
+# prompt, since a running shell can't un-load a hook mid-session. Hand off to a fresh bash instead
+# of leaving you there - only when there's a real terminal to hand off to (not `curl | bash`).
+if [[ -t 0 && -t 1 ]]; then
+  echo "  Switching to a fresh bash so a stale prompt hook doesn't keep erroring. 'exit' to leave it."
+  exec bash -i
+fi
+echo "  Open a new terminal to get your previous bash setup back."
 exit 0
 }
