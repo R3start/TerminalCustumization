@@ -6,7 +6,7 @@
     Installs what is missing (and upgrades what winget manages) of:
       Windows Terminal, PowerShell 7, Oh My Posh, Nushell, eza, bat, ripgrep, fzf,
       zoxide, duf, dust and the GitHub CLI.
-    Then installs the JetBrainsMono Nerd Font if it is missing, copies the configuration to
+    Then installs the JetBrainsMono Nerd Font Mono if it is missing, copies the configuration to
     ~/.config/terminal-customization, wires up PowerShell 7, Windows PowerShell 5.1
     and Nushell, adds a "Nushell (Microverse)" Windows Terminal profile and makes it
     the default on a first install. Re-running the script only adds what is missing.
@@ -26,7 +26,7 @@
 param(
     # Do not install/upgrade the tools with winget
     [switch]$SkipTools,
-    # Do not install the JetBrainsMono Nerd Font
+    # Do not install the JetBrainsMono Nerd Font Mono
     [switch]$SkipFonts,
     # Reinstall the font even when it is already installed (upgrade.ps1 does this)
     [switch]$UpdateFonts,
@@ -149,7 +149,7 @@ function Get-ManifestEntries([string]$Kind) {
     @(Get-Content $Manifest | Where-Object { $_ -like "$Kind`t*" } | ForEach-Object { $_.Substring($Kind.Length + 1) })
 }
 
-# Per-user JetBrainsMono Nerd Font files and their HKCU registry values.
+# Per-user JetBrainsMono Nerd Font Mono files and their HKCU registry values.
 function Get-FontSnapshot {
     $files = @(Get-ChildItem $UserFontDir -Filter 'JetBrainsMono*NerdFont*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
     $values = @()
@@ -288,12 +288,12 @@ Update-SessionPath
 
 # --- 2. font ------------------------------------------------------------------------
 if (-not $SkipFonts) {
-    Write-Step 'Installing JetBrainsMono Nerd Font (latest release)'
+    Write-Step 'Installing JetBrainsMono Nerd Font Mono (latest release)'
     $ourFonts = @(Get-ManifestEntries 'font')
     if (-not $UpdateFonts -and (Test-NerdFontInstalled)) {
-        Write-Ok 'JetBrainsMono Nerd Font already installed (upgrade.ps1 or -UpdateFonts refreshes it)'
+        Write-Ok 'JetBrainsMono Nerd Font Mono already installed (upgrade.ps1 or -UpdateFonts refreshes it)'
     } elseif ((Test-NerdFontInstalled) -and $ourFonts.Count -eq 0) {
-        Write-Ok 'JetBrainsMono Nerd Font is installed, but not by this script - left as it is'
+        Write-Ok 'JetBrainsMono Nerd Font Mono is installed, but not by this script - left as it is'
     } elseif (Test-Command oh-my-posh) {
         $before = Get-FontSnapshot
         oh-my-posh font install JetBrainsMono
@@ -302,7 +302,7 @@ if (-not $SkipFonts) {
             $after = Get-FontSnapshot
             $after.Files | Where-Object { $before.Files -notcontains $_ } | ForEach-Object { Add-ManifestEntry 'font' $_ }
             $after.Values | Where-Object { $before.Values -notcontains $_ } | ForEach-Object { Add-ManifestEntry 'fontreg' $_ }
-            Write-Ok 'JetBrainsMono Nerd Font installed'
+            Write-Ok 'JetBrainsMono Nerd Font Mono installed'
         } else {
             Write-Warn 'Font installation failed, see README "Fonts" for the manual steps'
         }
@@ -566,20 +566,20 @@ foreach ($settings in $settingsFiles) {
     $json = [IO.File]::ReadAllText($settings)
     $emptyDefaults = '"defaults"\s*:\s*\{\s*\}'
     if ($json -match $emptyDefaults) {
-        $json = [regex]::Replace($json, $emptyDefaults, '"defaults": { "font": { "face": "JetBrainsMono Nerd Font" } }', 1)
+        $json = [regex]::Replace($json, $emptyDefaults, '"defaults": { "font": { "face": "JetBrainsMono NFM" } }', 1)
         if (Update-FileIfChanged $settings $json) {
             Add-ManifestEntry 'wt-defaults-font' $settings
-            Write-Ok "all Windows Terminal profiles use JetBrainsMono Nerd Font ($settings)"
+            Write-Ok "all Windows Terminal profiles use JetBrainsMono Nerd Font Mono ($settings)"
         }
-    } elseif ($json -notmatch 'Nerd Font') {
-        Write-Warn "Windows Terminal: set the font of your other profiles (Settings > Defaults > Appearance > Font face) to 'JetBrainsMono Nerd Font' for the icons."
+    } elseif ($json -notmatch 'Nerd Font|NFM?P?\b') {
+        Write-Warn "Windows Terminal: set the font of your other profiles (Settings > Defaults > Appearance > Font face) to 'JetBrainsMono NFM' for the icons."
     }
 }
 
 # --- done --------------------------------------------------------------------------------
 Write-Step 'Done'
 Write-Host '  Open a new Windows Terminal tab/window to start Nushell with the new prompt.'
-Write-Host "  Other terminals (VS Code, Visual Studio's terminal, conhost): set the font to 'JetBrainsMono Nerd Font'."
+Write-Host "  Other terminals (VS Code, Visual Studio's terminal, conhost): set the font to 'JetBrainsMono NFM'."
 Write-Host '  Restart Visual Studio (and other programs that were open during the install) so their shells get the new PATH.'
 Write-Host '  Prompt still looks old? Run: Get-Content $PROFILE  - and look for oh-my-posh lines outside the terminal-customization block.'
 if ((Test-Command gh) -and (Invoke-Quiet { gh auth status }) -ne 0) { Write-Host "  Run 'gh auth login' to sign in to GitHub." }

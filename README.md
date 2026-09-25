@@ -49,7 +49,7 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
   are still installed; `-RemoveOldModules` uninstalls them. The copy of PSReadLine that ships inside PowerShell
   can't be removed; this setup simply doesn't configure it.
 - The bundled Nerd Font v2 files are gone. The latest JetBrainsMono Nerd Font (v3, family name
-  `JetBrainsMono Nerd Font`) is downloaded instead.
+  `JetBrainsMono NFM`, the Mono variant so icons keep a single character cell) is downloaded instead.
 - Oh My Posh no longer ships themes in `POSH_THEMES_PATH`/`~/.poshthemes`. The theme is now kept in this repo.
 - All configuration lives in [`config/`](config) and is shared by bash, PowerShell (5.1 and 7) and Nushell.
 
@@ -204,7 +204,7 @@ What it does:
    Also sets up Nushell, the bat theme, and PowerShell if `pwsh` is installed.
 5. New interactive terminals start Nushell automatically.
 
-After installing, **select `JetBrainsMono Nerd Font` in your terminal's settings**. The Windows Terminal
+After installing, **select `JetBrainsMono NFM` in your terminal's settings**. The Windows Terminal
 profile and `--gnome-terminal` do this for you.
 
 ---
@@ -246,9 +246,11 @@ oh-my-posh font install JetBrainsMono
 Alternatively, download `JetBrainsMono.zip` from the latest [Nerd Fonts release](https://github.com/ryanoasis/nerd-fonts/releases/latest),
 extract it, select all `.ttf` files, then right-click → **Install** (or **Install for all users**).
 
-Then set the font in each terminal:
-- **Windows Terminal**: *Settings → Profiles → Defaults → Appearance → Font face* → `JetBrainsMono Nerd Font`.
-- **VS Code**: `"terminal.integrated.fontFamily": "JetBrainsMono Nerd Font"` in `settings.json`.
+Then set the font in each terminal (Nerd Fonts v3 installs JetBrainsMono under the shortened family
+names `JetBrainsMono NF`/`NFM`/`NFP`, not `JetBrainsMono Nerd Font` — pick the `NFM` (Mono) variant so
+icons keep a single character cell):
+- **Windows Terminal**: *Settings → Profiles → Defaults → Appearance → Font face* → `JetBrainsMono NFM`.
+- **VS Code**: `"terminal.integrated.fontFamily": "JetBrainsMono NFM"` in `settings.json`.
 
 ### 4. Shared configuration files
 
@@ -331,7 +333,7 @@ Windows Terminal starts profiles with the PATH it was launched with, so a bare `
 *"error 2147942402 (0x80070002) when launching `nu.exe`"*.
 
 Without the fragment, you can add a profile by hand: *Settings → Add a new profile → New empty profile*, command line
-`"C:\Program Files\nu\bin\nu.exe"` (the full path from above), font `JetBrainsMono Nerd Font`.
+`"C:\Program Files\nu\bin\nu.exe"` (the full path from above), font `JetBrainsMono NFM`.
 
 VS Code: add `"terminal.integrated.defaultProfile.windows": "Nushell"` and a profile entry
 `"terminal.integrated.profiles.windows": { "Nushell": { "path": "nu.exe" } }`.
@@ -423,7 +425,7 @@ fc-cache -f
 ```
 
 Alternatively, download `JetBrainsMono.tar.xz` from the latest [Nerd Fonts release](https://github.com/ryanoasis/nerd-fonts/releases/latest)
-and extract it into `~/.local/share/fonts`. Then select **JetBrainsMono Nerd Font** in your terminal's preferences.
+and extract it into `~/.local/share/fonts`. Then select **JetBrainsMono NFM** in your terminal's preferences.
 On WSL, install the font on **Windows** instead; the terminal runs there.
 
 ### 3. Shared configuration files
@@ -509,7 +511,7 @@ Studio terminal, and their Windows Terminal profiles) get the same setup:
   profile adds the missing entries itself. The Command Prompt only sees the new tools after a restart.
 - **Font:** Windows Terminal profiles get the Nerd Font through the profile defaults (see step 6 above). For Visual
   Studio's own terminal, choose *Tools → Options → Environment → Fonts and Colors → Show settings for: Terminal* →
-  **JetBrainsMono Nerd Font**.
+  **JetBrainsMono NFM**.
 
 ## Upgrading
 
@@ -623,7 +625,7 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
    'junegunn.fzf','ajeetdsouza.zoxide','muesli.duf','bootandy.dust','GitHub.cli' |
        ForEach-Object { winget uninstall --id $_ --exact }
    ```
-6. **Font:** *Settings → Personalization → Fonts* → search "JetBrainsMono" → each **JetBrainsMono Nerd Font** entry → *Uninstall*.
+6. **Font:** *Settings → Personalization → Fonts* → search "JetBrainsMono" → each **JetBrainsMono NF/NFM/NFP** entry → *Uninstall*.
 7. **cmd.exe:** `clink uninstallscripts "$HOME\.config\terminal-customization\clink"`, and
    `clink autorun uninstall` if you don't want Clink in cmd.exe any more. Then `winget uninstall chrisant996.Clink`.
 8. **Configuration:** `Remove-Item -Recurse "$HOME\.config\terminal-customization"`.
@@ -647,7 +649,7 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 
 | Problem | Fix |
 |---------|-----|
-| Squares or `?` instead of icons | Select **JetBrainsMono Nerd Font** in the terminal settings. On WSL/SSH, install the font on the machine running the terminal. |
+| Squares or `?` instead of icons | Select **JetBrainsMono NFM** in the terminal settings (Nerd Fonts v3 installs it under that shortened name, not "JetBrainsMono Nerd Font"). On WSL/SSH, install the font on the machine running the terminal. |
 | `command not found` right after installing | Open a new terminal. On Linux, check that `~/.local/bin` is in `PATH`. |
 | PowerShell: "running scripts is disabled" | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 | Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: `.\install.ps1 -SkipTools -SkipFonts -NoDefaultShell` and pick another default profile in Windows Terminal. |

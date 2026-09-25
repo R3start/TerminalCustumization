@@ -204,7 +204,9 @@ foreach ($settings in $settingsFiles) {
 foreach ($settings in Get-ManifestEntries 'wt-defaults-font') {
     if (-not (Test-Path $settings)) { continue }
     $json = [IO.File]::ReadAllText($settings)
-    $ours = '"defaults"\s*:\s*\{\s*"font"\s*:\s*\{\s*"face"\s*:\s*"JetBrainsMono Nerd Font"\s*\}\s*\}'
+    # Matches both the current face value and the one older installs wrote (JetBrainsMono Nerd Font,
+    # before Nerd Fonts v3 renamed the family to JetBrainsMono NFM).
+    $ours = '"defaults"\s*:\s*\{\s*"font"\s*:\s*\{\s*"face"\s*:\s*"JetBrainsMono (Nerd Font|NFM)"\s*\}\s*\}'
     if ($json -match $ours) {
         Backup-File $settings
         Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaults": {}', 1))
