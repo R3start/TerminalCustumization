@@ -46,7 +46,8 @@ $WtProfileGuid = '{7c3e2a5b-4d1f-4b8e-9a6c-2f5d8e1b3a74}'
 $StateDir = Join-Path $env:LOCALAPPDATA 'terminal-customization'
 $Manifest = Join-Path $StateDir 'manifest.txt'
 $WingetTools = 'JanDeDobbeleer.OhMyPosh', 'Nushell.Nushell', 'eza-community.eza', 'sharkdp.bat',
-    'BurntSushi.ripgrep.MSVC', 'junegunn.fzf', 'ajeetdsouza.zoxide', 'muesli.duf', 'bootandy.dust', 'GitHub.cli'
+    'BurntSushi.ripgrep.MSVC', 'junegunn.fzf', 'ajeetdsouza.zoxide', 'muesli.duf', 'bootandy.dust', 'GitHub.cli',
+    'chrisant996.Clink'
 # Well-known Windows Terminal profile GUIDs
 $Pwsh7Guid = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
 $WinPsGuid = '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}'
@@ -100,6 +101,27 @@ function Remove-ManifestEntries([string]$Kind) {
     if ($keep) { Set-Content -Path $Manifest -Value $keep -Encoding UTF8 } else { Remove-Item $Manifest -Force }
 }
 
+# The profile files each PowerShell edition really loads, asked from the shell itself (so a moved or
+# OneDrive-redirected Documents folder is handled). Falls back to the usual Documents paths.
+function Get-PowerShellProfiles {
+    $documents = [Environment]::GetFolderPath('MyDocuments')
+    if (-not $documents) { $documents = Join-Path $HOME 'Documents' }
+    foreach ($edition in @(@{ Shell = 'pwsh'; Folder = 'PowerShell' }, @{ Shell = 'powershell'; Folder = 'WindowsPowerShell' })) {
+        $paths = @()
+        if (Get-Command $edition.Shell -ErrorAction SilentlyContinue) {
+            $ErrorActionPreference = 'Continue'
+            $paths = @(& $edition.Shell -NoLogo -NoProfile -NonInteractive -Command '$PROFILE.CurrentUserCurrentHost; $PROFILE.CurrentUserAllHosts' 2>$null |
+                ForEach-Object { "$_".Trim() } | Where-Object { $_ -match '\.ps1$' })
+            $ErrorActionPreference = 'Stop'
+        }
+        if ($paths.Count -ne 2) {
+            $dir = Join-Path $documents $edition.Folder
+            $paths = @((Join-Path $dir 'Microsoft.PowerShell_profile.ps1'), (Join-Path $dir 'profile.ps1'))
+        }
+        [pscustomobject]@{ Edition = $edition.Folder; CurrentHost = $paths[0]; AllHosts = $paths[1] }
+    }
+}
+
 function Remove-IfExists([string]$Path) {
     if (Test-Path $Path) { Remove-Item $Path -Recurse -Force; Write-Ok "removed $Path" }
 }
@@ -125,10 +147,10 @@ if (-not $Yes) {
 
 # --- shells ------------------------------------------------------------------------------
 Write-Step 'Removing shell integration'
-$documents = [Environment]::GetFolderPath('MyDocuments')
-foreach ($edition in 'PowerShell', 'WindowsPowerShell') {
-    $path = Join-Path $documents "$edition\profile.ps1"
-    if (Remove-MarkedBlock $path) { Write-Ok $path }
+foreach ($profiles in Get-PowerShellProfiles) {
+    foreach ($path in @($profiles.CurrentHost, $profiles.AllHosts)) {
+        if (Remove-MarkedBlock $path) { Write-Ok $path }
+    }
 }
 Write-Host '  Lines the installer commented out ("# disabled by terminal-customization:") are left as they are.' -ForegroundColor DarkGray
 
@@ -176,6 +198,37 @@ foreach ($settings in $settingsFiles) {
         Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaultProfile": "' + $fallback + '"'))
         Write-Ok "default profile set back to PowerShell in $settings"
     }
+}
+
+# --- Windows Terminal font default and cmd.exe (Clink) -----------------------------------------
+foreach ($settings in Get-ManifestEntries 'wt-defaults-font') {
+    if (-not (Test-Path $settings)) { continue }
+    $json = [IO.File]::ReadAllText($settings)
+    $ours = '"defaults"\s*:\s*\{\s*"font"\s*:\s*\{\s*"face"\s*:\s*"JetBrainsMono Nerd Font"\s*\}\s*\}'
+    if ($json -match $ours) {
+        Backup-File $settings
+        Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaults": {}', 1))
+        Write-Ok "Windows Terminal profile defaults restored in $settings"
+    }
+}
+Remove-ManifestEntries 'wt-defaults-font'
+
+$clinkScripts = @(Get-ManifestEntries 'clink-scripts')
+$clinkAutorun = @(Get-ManifestEntries 'clink-autorun')
+if ($clinkScripts -or $clinkAutorun) {
+    $clink = Get-Command clink -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { $_.Source }
+    if (-not $clink) {
+        foreach ($dir in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+            if ($dir -and (Test-Path (Join-Path $dir 'clink\clink.bat'))) { $clink = Join-Path $dir 'clink\clink.bat'; break }
+        }
+    }
+    if ($clink) {
+        foreach ($dir in $clinkScripts) { Invoke-Quiet { & $clink uninstallscripts $dir } | Out-Null }
+        if ($clinkAutorun) { Invoke-Quiet { & $clink autorun uninstall } | Out-Null; Write-Ok 'Clink no longer starts with cmd.exe' }
+        Write-Ok 'cmd.exe configuration (Clink script) removed'
+    }
+    Remove-ManifestEntries 'clink-scripts'
+    Remove-ManifestEntries 'clink-autorun'
 }
 
 # --- fonts (before the tools, so nothing is holding them) -------------------------------------

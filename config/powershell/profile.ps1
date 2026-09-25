@@ -6,6 +6,10 @@
 # PSReadLine is intentionally not configured; history search, file search and
 # directory jumping are provided by fzf and zoxide instead.
 
+# Load once per session: the installer adds this to both $PROFILE and profile.ps1.
+if ($global:TcProfileLoaded) { return }
+$global:TcProfileLoaded = $true
+
 $TcHome = if ($env:TC_HOME) { $env:TC_HOME } else { Join-Path $HOME '.config/terminal-customization' }
 
 # Linux: tools installed by install.sh live in ~/.local/bin
@@ -15,9 +19,56 @@ if (($IsLinux -or $IsMacOS) -and (Test-Path $TcLocalBin) -and
     $env:PATH = $TcLocalBin + [IO.Path]::PathSeparator + $env:PATH
 }
 
+# Windows: a shell started by a program that was already running before the tools were installed
+# (Visual Studio and its Developer PowerShell, an old Explorer window) inherits an outdated PATH,
+# so the new tools are missing or an older copy (e.g. of oh-my-posh) is found first. Put the PATH
+# entries that new processes get (machine + user, from the registry) in front when they are missing.
+if ($env:OS -eq 'Windows_NT') {
+    $TcCurrentPath = @($env:Path -split ';' | Where-Object { $_ })
+    $TcMissing = @(
+        [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        [Environment]::GetEnvironmentVariable('Path', 'User')
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
+    ) -join ';' -split ';' | Where-Object { $_ } |
+        ForEach-Object { [Environment]::ExpandEnvironmentVariables($_) } |
+        Where-Object { $TcCurrentPath -notcontains $_ } | Select-Object -Unique
+    if ($TcMissing) { $env:Path = (@($TcMissing) + $TcCurrentPath) -join ';' }
+    Remove-Variable TcCurrentPath, TcMissing
+}
+
 function Test-TcCommand([string]$Name) {
     [bool](Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
+
+# --- Nushell as the default interactive shell -------------------------------
+# A PowerShell window opened normally (Start menu, a Windows Terminal PowerShell tab, `pwsh` on
+# Linux) hands over to Nushell, like bash does. PowerShell stays when:
+#   - it was started to run something (-Command, -File, ...), e.g. the Visual Studio Developer
+#     PowerShell, VS Code, scripts;
+#   - it runs inside Nushell (TC_IN_NU is set there, so typing `powershell` in nu gives PowerShell);
+#   - TC_NO_NU is set, or ~/.config/terminal-customization/no-nu exists
+#     (install.ps1 -NoDefaultShell / install.sh --no-default-shell).
+# If Nushell fails right away, PowerShell simply continues.
+$TcExtraArgs = @([Environment]::GetCommandLineArgs() | Select-Object -Skip 1 |
+    Where-Object { $_ -notmatch '^-(nologo|login|l|interactive|mta|sta)$' })
+if (-not $env:TC_IN_NU -and -not $env:TC_NO_NU -and $TcExtraArgs.Count -eq 0 -and
+    $Host.Name -eq 'ConsoleHost' -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected -and
+    -not (Test-Path (Join-Path $TcHome 'no-nu'))) {
+    $TcNu = Get-Command nu -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($TcNu) {
+        $env:TC_IN_NU = '1'
+        $TcStarted = Get-Date
+        $TcRan = $false
+        try { & $TcNu.Source; $TcRan = $true } catch { Write-Warning "Could not start Nushell: $($_.Exception.Message)" }
+        if ($TcRan -and ($LASTEXITCODE -eq 0 -or ((Get-Date) - $TcStarted).TotalSeconds -gt 5)) {
+            # Leaving nu closes the window, as if nu had been started directly.
+            [Environment]::Exit([int]$LASTEXITCODE)
+        }
+        if ($TcRan) { Write-Warning "Nushell exited with code $LASTEXITCODE right after starting; staying in PowerShell." }
+        Remove-Item Env:TC_IN_NU -ErrorAction SilentlyContinue
+    }
+}
+Remove-Variable TcExtraArgs -ErrorAction SilentlyContinue
 
 # --- shared tool settings (same files as bash / Nushell) --------------------
 $env:EZA_CONFIG_DIR        = Join-Path $TcHome 'eza'
