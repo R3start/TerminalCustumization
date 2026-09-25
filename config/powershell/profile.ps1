@@ -93,10 +93,11 @@ if (Test-TcCommand fzf) {
     # rgf <pattern> - ripgrep, pick a match (bat preview), open file at that line in VS Code or print it
     function rgf {
         if (-not (Test-TcCommand rg)) { Write-Warning 'ripgrep (rg) is not installed'; return }
-        $hit = rg --line-number --no-heading --color=always @args |
-            fzf --ansi --delimiter ':' --preview 'bat --color=always --highlight-line {2} {1}' --preview-window '+{2}-/2'
+        # Fields are separated by a tab, not ':', so Windows paths (C:\...) are not split.
+        $hit = rg --line-number --no-heading --color=always --field-match-separator "`t" @args |
+            fzf --ansi --delimiter "`t" --preview 'bat --color=always --highlight-line {2} {1}' --preview-window '+{2}-/2'
         if (-not $hit) { return }
-        $file, $line = $hit -split ':', 3
+        $file, $line, $null = $hit -split "`t", 3
         if (Test-TcCommand code) { code --goto "${file}:${line}" } else { bat --paging=never --highlight-line $line $file }
     }
 }
