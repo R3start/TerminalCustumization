@@ -534,9 +534,13 @@ font_installed() {
 }
 
 # oh-my-posh installs fonts into ~/.local/share/fonts (or /usr/share/fonts when run as root).
+# On a machine that never had any local fonts, that directory doesn't exist yet the first time
+# this runs (before oh-my-posh creates it): find would fail and, under `set -e pipefail`, silently
+# kill the whole script right here, before the config step ever runs. Missing dir = no files.
 font_files() {
   local dir="$HOME/.local/share/fonts"
   [[ $EUID -eq 0 ]] && dir=/usr/share/fonts
+  [[ -d "$dir" ]] || return 0
   find "$dir" -maxdepth 1 -type f -name 'JetBrainsMono*NerdFont*' 2>/dev/null | sort
 }
 
