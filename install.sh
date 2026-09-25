@@ -61,7 +61,7 @@ usage() {
 Usage: install.sh [options]
 
   --skip-tools        do not install/upgrade the CLI tools
-  --skip-fonts        do not install the JetBrainsMono Nerd Font
+  --skip-fonts        do not install the JetBrainsMono Nerd Font Mono
   --update-fonts      reinstall the font even if it is already installed (upgrade.sh does this)
   --skip-config       do not touch shell configuration files
   --no-default-shell  keep bash as the interactive shell (do not start Nushell automatically)
@@ -499,12 +499,12 @@ setup_gnome_terminal() {
   [[ -n "$id" ]] || { warn "GNOME Terminal has no default profile"; return 0; }
   path="org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$id/"
   gsettings set "$path" use-system-font false
-  gsettings set "$path" font 'JetBrainsMono Nerd Font 11'
+  gsettings set "$path" font 'JetBrainsMono NFM 11'
   gsettings set "$path" use-theme-colors false
   gsettings set "$path" background-color '#0C0C0C'
   gsettings set "$path" foreground-color '#E6E6E6'
   gsettings set "$path" palette "['#242424', '#F1184C', '#33DD2D', '#FFBB00', '#3A86FF', '#B45CFF', '#2EC4E6', '#D0D0D0', '#6C6C6C', '#FF4D74', '#66F060', '#FFD24D', '#6FA8FF', '#CC8CFF', '#6FDAF2', '#FFFFFF']"
-  ok "GNOME Terminal profile $id uses JetBrainsMono Nerd Font + Microverse colours"
+  ok "GNOME Terminal profile $id uses JetBrainsMono Nerd Font Mono + Microverse colours"
 }
 
 # --- main ----------------------------------------------------------------------------
@@ -526,7 +526,7 @@ fi
 
 font_installed() {
   if has fc-list; then
-    fc-list : family 2>/dev/null | grep -qi 'JetBrainsMono Nerd Font'
+    fc-list : family 2>/dev/null | grep -qi 'JetBrainsMono NFM'
   else
     find "$HOME/.local/share/fonts" /usr/share/fonts /usr/local/share/fonts -name 'JetBrainsMono*NerdFont*' \
       -print -quit 2>/dev/null | grep -q .
@@ -541,19 +541,19 @@ font_files() {
 }
 
 if [[ $DO_FONTS == 1 ]]; then
-  step "Installing JetBrainsMono Nerd Font (latest)"
+  step "Installing JetBrainsMono Nerd Font Mono (latest)"
   ours=$([[ -f "$MANIFEST" ]] && awk -F '\t' '$1 == "font"' "$MANIFEST" | head -n1)
   if font_installed && [[ $UPDATE_FONTS == 0 ]]; then
-    ok "JetBrainsMono Nerd Font already installed (upgrade.sh or --update-fonts refreshes it)"
+    ok "JetBrainsMono Nerd Font Mono already installed (upgrade.sh or --update-fonts refreshes it)"
   elif font_installed && [[ -z "$ours" ]]; then
-    ok "JetBrainsMono Nerd Font is installed, but not by this script - left as it is"
+    ok "JetBrainsMono Nerd Font Mono is installed, but not by this script - left as it is"
   elif has oh-my-posh; then
     font_files > "$TMP_DIR/fonts.before"
     if oh-my-posh font install JetBrainsMono </dev/null; then
       has fc-cache && fc-cache -f >/dev/null 2>&1 || true
       # Record only the files this run added (a font you installed yourself is never recorded).
       font_files | comm -13 "$TMP_DIR/fonts.before" - | while IFS= read -r f; do manifest_set font "$f"; done
-      ok "font installed - select 'JetBrainsMono Nerd Font' in your terminal settings"
+      ok "font installed - select 'JetBrainsMono NFM' in your terminal settings"
     else
       warn "font installation failed; see README 'Fonts' for the manual steps"
     fi

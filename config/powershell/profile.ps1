@@ -36,6 +36,15 @@ if ($env:OS -eq 'Windows_NT') {
     Remove-Variable TcCurrentPath, TcMissing
 }
 
+# Windows: a standalone console window (Developer PowerShell/Command Prompt shortcuts, plain
+# "Windows PowerShell", conhost in general) starts on the system OEM codepage, not UTF-8. bat, eza
+# and the oh-my-posh prompt write UTF-8 box-drawing/icon glyphs, so under the wrong codepage those
+# come out as mojibake (e.g. "Γöé" instead of a single "│"). This also carries over to Nushell when
+# PowerShell hands off to it below, since the codepage belongs to the console, not the process.
+if ($env:OS -eq 'Windows_NT' -and $Host.Name -eq 'ConsoleHost') {
+    try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+}
+
 function Test-TcCommand([string]$Name) {
     [bool](Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
@@ -94,9 +103,10 @@ if (Test-TcCommand oh-my-posh) {
 }
 
 # --- eza: modern ls (replaces Terminal-Icons) -------------------------------
+# ls stays PowerShell's native Get-ChildItem (structured objects, pipeable), like Nushell keeps
+# its own ls; use l for eza's colourful listing, same split as Nushell's ls/l.
 if (Test-TcCommand eza) {
-    Remove-Item Alias:ls -Force -ErrorAction SilentlyContinue
-    function ls { eza --icons=auto --group-directories-first @args }
+    function l { eza --icons=auto --group-directories-first @args }
     function ll { eza --icons=auto --group-directories-first --long --header --git @args }
     function la { eza --icons=auto --group-directories-first --long --header --git --all @args }
     function lt { eza --icons=auto --group-directories-first --tree --level=2 @args }
@@ -237,7 +247,7 @@ function Test-TerminalCustomization {
     }
     ''
     'Commands:'
-    foreach ($name in 'ls', 'll', 'la', 'lt', 'cat', 'df', 'du', 'z', 'zi', 'fe', 'fcd', 'fh', 'rgf') {
+    foreach ($name in 'ls', 'l', 'll', 'la', 'lt', 'cat', 'df', 'du', 'z', 'zi', 'fe', 'fcd', 'fh', 'rgf') {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
         $what = if (-not $cmd) { 'not defined' }
             elseif ($cmd.CommandType -eq 'Alias') { "alias -> $($cmd.Definition)" }

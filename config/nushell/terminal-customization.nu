@@ -4,6 +4,12 @@
 
 $env.config.show_banner = false
 
+# Windows: the console starts on the system OEM codepage, not UTF-8, unless something already
+# switched it (PowerShell does this before handing off to Nushell, but Windows Terminal launches
+# nu.exe directly). Under the wrong codepage, bat/eza/oh-my-posh's UTF-8 box-drawing and icon
+# glyphs come out as mojibake (e.g. "Γöé" instead of a single "│").
+if $nu.os-info.name == 'windows' { ^chcp 65001 | ignore }
+
 # --- shared tool settings (same files as bash / PowerShell) ----------------
 let tc_home = ('~/.config/terminal-customization' | path expand)
 $env.TC_HOME = $tc_home

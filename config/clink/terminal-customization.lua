@@ -10,6 +10,10 @@ local home = os.getenv("USERPROFILE") or ""
 local tc = os.getenv("TC_HOME") or (home .. "\\.config\\terminal-customization")
 local here = tc .. "\\clink"
 
+-- cmd.exe starts on the system OEM codepage, not UTF-8, so bat/eza/oh-my-posh's UTF-8
+-- box-drawing and icon glyphs come out as mojibake (e.g. "Γöé" instead of a single "│").
+os.execute("chcp 65001 > nul")
+
 -- Which tools are on PATH (one `where` call for all of them).
 local tools = {}
 local where = io.popen('where oh-my-posh eza bat duf dust zoxide fzf rg 2>nul')
