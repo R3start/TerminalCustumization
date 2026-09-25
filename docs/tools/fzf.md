@@ -18,9 +18,9 @@ predictions: history, files and directories are all searched with fzf.
 
 | Shell | Key / command | Action |
 |-------|---------------|--------|
-| bash, Nushell | `Ctrl+R` | search command history |
-| bash, Nushell | `Ctrl+T` | pick files (bat preview) and paste them into the command line |
-| bash, Nushell | `Alt+C` | pick a directory (eza tree preview) and `cd` into it |
+| bash, Nushell, PowerShell | `Ctrl+R` | search command history (PowerShell: the chosen command is put on the line, not run) |
+| bash, Nushell, PowerShell | `Ctrl+T` | pick files (bat preview) and paste them into the command line |
+| bash, Nushell, PowerShell | `Alt+C` | pick a directory (eza tree preview) and `cd` into it |
 | bash | `vim **<Tab>` | fuzzy completion for paths (`kill -9 **<Tab>` for processes) |
 | all | `zi` | pick from zoxide's frequent directories |
 | PowerShell | `fh [query]` | search history and run the chosen command |
@@ -35,6 +35,9 @@ Search syntax: `'exact`, `^prefix`, `suffix$`, `!exclude`, `a | b`.
 
 - Defaults (layout, border, microverse colours) live in [`config/fzf/fzfrc`](../../config/fzf/fzfrc), loaded with `FZF_DEFAULT_OPTS_FILE`.
 - `FZF_DEFAULT_COMMAND` uses `rg --files --hidden`, so ignored files are skipped.
+- In Nushell on Windows, `Ctrl+T` uses fzf's built-in file walker, which skips `.git`, `node_modules`, … but not
+  `.gitignore`d files. fzf's Nushell key bindings would need `sh` to run the ripgrep list, and Windows has no `sh`.
+- PowerShell's key bindings use the PSReadLine that ships with PowerShell, for these three keys only.
 - Shell integration: bash `eval "$(fzf --bash)"`; Nushell `fzf --nushell | save -f ($nu.default-config-dir | path join autoload fzf.nu)`.
 
 ## Everyday commands

@@ -57,9 +57,10 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 
 | Shortcut / alias | Action | Shells |
 |------------------|--------|--------|
-| `Ctrl+R` | fuzzy search history | bash, Nushell (`fh` in PowerShell) |
-| `Ctrl+T` | fuzzy pick files (bat preview) | bash, Nushell (`fe` in PowerShell) |
-| `Alt+C` | fuzzy `cd` into a sub-directory | bash, Nushell (`fcd` in PowerShell) |
+| `Ctrl+R` | fuzzy search history | bash, Nushell, PowerShell |
+| `Ctrl+T` | fuzzy pick files (bat preview) | bash, Nushell, PowerShell |
+| `Alt+C` | fuzzy `cd` into a sub-directory | bash, Nushell, PowerShell |
+| `tc-doctor` | shows what the setup loaded in this session (profiles, tools, aliases, key bindings) | PowerShell |
 | `z <name>` / `zi` | jump to a frequently used directory | all |
 | `ls`, `ll`, `la`, `lt` | eza: list, long, long + hidden, tree | all (Nushell keeps its own `ls`; use `l`) |
 | `cat` | bat | all |
@@ -499,8 +500,8 @@ gh auth login
 Visual Studio's **Developer PowerShell** and **Developer Command Prompt** (Start menu, *Tools → Command Line*, the Visual
 Studio terminal, and their Windows Terminal profiles) get the same setup:
 
-- **Developer PowerShell** loads the PowerShell profile: Oh My Posh prompt, eza/bat/duf/dust aliases, fzf helpers,
-  zoxide. It stays PowerShell and doesn't switch to Nushell: Visual Studio starts it with `-Command Enter-VsDevShell …`,
+- **Developer PowerShell** loads the PowerShell profile: Oh My Posh prompt, eza/bat/duf/dust aliases, `z`/`zi`, and the
+  fzf key bindings Ctrl+T / Ctrl+R / Alt+C. If something is missing, run `tc-doctor` there. It stays PowerShell and doesn't switch to Nushell: Visual Studio starts it with `-Command Enter-VsDevShell …`,
   and switching would lose the build environment. Its Start-menu shortcut uses the 32-bit Windows PowerShell, which has
   its own execution policy; the installer checks that one too.
 - **Developer Command Prompt** is `cmd.exe` with Clink: Oh My Posh prompt, `ls`/`ll`/`la`/`lt`/`cat`/`df`/`du`, `z`/`zi`.
@@ -652,6 +653,7 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 | Want bash/PowerShell back as the default | Linux: `./install.sh --skip-tools --skip-fonts --no-default-shell` (or `touch ~/.config/terminal-customization/no-nu`). Windows: `.\install.ps1 -SkipTools -SkipFonts -NoDefaultShell` and pick another default profile in Windows Terminal. |
 | A PowerShell window doesn't switch to Nushell | Only a normally opened PowerShell switches, not one started with `-Command`/`-File`. Check that `TC_NO_NU` isn't set and that `%USERPROFILE%\.config\terminal-customization\no-nu` doesn't exist. `Get-Command nu` must find Nushell. |
 | PowerShell shows the old prompt | Run `Get-Content $PROFILE`. Old `oh-my-posh init …` lines outside the `terminal-customization` block should be commented out (`# disabled by terminal-customization`), and the block should be the last thing in the file. Re-run `install.ps1` if it isn't. |
+| Something from the setup is missing in a PowerShell console | Run `tc-doctor` in that console. It shows why Nushell was or wasn't started, which profile files exist and contain the setup, where each tool was found (and older copies), whether `ls`/`cat`/`z`/… are this setup's commands, and whether Ctrl+T/R and Alt+C are bound. |
 | Visual Studio Developer PowerShell shows an old prompt / no new tools | Restart Visual Studio so it gets the new PATH. `Get-Command oh-my-posh -All` shows every copy on PATH; uninstall an old one that comes first. |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |
