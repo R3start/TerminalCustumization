@@ -143,9 +143,17 @@ parse_release_json() {
       { sub(/^"browser_download_url": *"/, ""); sub(/"$/, ""); print $0 "\t" d; d = "" }'
 }
 
+# Set by release_assets(): 1 when the GitHub API call failed and it fell back to scraping the
+# release page instead, which has no asset digests. Some tools (eza, bat, zoxide, dust) publish a
+# checksum ONLY as that API digest, no separate .sha256/checksums.txt file, so falling back to the
+# scrape is exactly what turns their "checksum available" into "no checksum published" further
+# down - almost always because of GitHub's unauthenticated rate limit (60 requests/hour).
+RELEASE_ASSETS_FALLBACK=0
+
 # Prints the assets of the latest release of <owner/repo> as <url><TAB><sha256 or empty>.
 release_assets() {
   local repo=$1 json tag
+  RELEASE_ASSETS_FALLBACK=0
   if json=$(curl -fsSL "${CURL_AUTH[@]}" -H 'Accept: application/vnd.github+json' \
       "$GITHUB_API/repos/$repo/releases/latest" 2>/dev/null); then
     parse_release_json <<<"$json"
@@ -153,6 +161,7 @@ release_assets() {
   fi
   # Fallback without the API (e.g. rate limited): follow the /releases/latest redirect and read the
   # asset list page. No digests there; published checksum files are used instead.
+  RELEASE_ASSETS_FALLBACK=1
   tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "$GITHUB_WEB/$repo/releases/latest") || return 1
   tag=${tag##*/}
   curl -fsSL "$GITHUB_WEB/$repo/releases/expanded_assets/$tag" |
@@ -189,7 +198,11 @@ download_verified() {
   VERIFIED="NOT verified"
   expected=$(expected_sha256 "$url" "$assets")
   if [[ -z "$expected" && $ALLOW_UNVERIFIED == 0 ]]; then
-    warn "${url##*/}: no SHA-256 checksum is published for this download, refusing to install it (re-run with --allow-unverified to install it anyway)"
+    if [[ $RELEASE_ASSETS_FALLBACK == 1 ]]; then
+      warn "${url##*/}: couldn't reach the GitHub API to get its checksum (this tool only publishes one there, not as a separate file) - likely rate limited, set GITHUB_TOKEN and re-run, or --allow-unverified to install it anyway"
+    else
+      warn "${url##*/}: no SHA-256 checksum is published for this download, refusing to install it (re-run with --allow-unverified to install it anyway)"
+    fi
     return 1
   fi
   curl -fsSL "$url" -o "$out"
