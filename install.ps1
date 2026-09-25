@@ -576,10 +576,35 @@ foreach ($settings in $settingsFiles) {
     }
 }
 
+# --- VS Code integrated terminal font ------------------------------------------------------
+# VS Code has its own font setting (terminal.integrated.fontFamily), unrelated to Windows
+# Terminal's. Only set when missing, so your own choice is never overwritten.
+Write-Step 'Configuring the VS Code integrated terminal font'
+$vscodeSettingsFiles = @(
+    (Join-Path $env:APPDATA 'Code\User\settings.json')
+    (Join-Path $env:APPDATA 'Code - Insiders\User\settings.json')
+) | Where-Object { Test-Path $_ }
+if (-not $vscodeSettingsFiles) {
+    Write-Ok 'VS Code not found (no settings.json yet)'
+} else {
+    foreach ($settings in $vscodeSettingsFiles) {
+        $json = [IO.File]::ReadAllText($settings)
+        if ($json -match '"terminal\.integrated\.fontFamily"') {
+            Write-Ok "VS Code already has a terminal font set, left alone ($settings)"
+            continue
+        }
+        $updated = ([regex]'\{').Replace($json, "{`r`n    ""terminal.integrated.fontFamily"": ""JetBrainsMono NFM"",", 1)
+        if (Update-FileIfChanged $settings $updated) {
+            Add-ManifestEntry 'vscode-font' $settings
+            Write-Ok "VS Code integrated terminal uses JetBrainsMono NFM ($settings)"
+        }
+    }
+}
+
 # --- done --------------------------------------------------------------------------------
 Write-Step 'Done'
 Write-Host '  Open a new Windows Terminal tab/window to start Nushell with the new prompt.'
-Write-Host "  Other terminals (VS Code, Visual Studio's terminal, conhost): set the font to 'JetBrainsMono NFM'."
+Write-Host "  Other terminals (Visual Studio's terminal, conhost): set the font to 'JetBrainsMono NFM'."
 Write-Host '  Restart Visual Studio (and other programs that were open during the install) so their shells get the new PATH.'
 Write-Host '  Prompt still looks old? Run: Get-Content $PROFILE  - and look for oh-my-posh lines outside the terminal-customization block.'
 if ((Test-Command gh) -and (Invoke-Quiet { gh auth status }) -ne 0) { Write-Host "  Run 'gh auth login' to sign in to GitHub." }

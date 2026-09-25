@@ -167,6 +167,8 @@ What it does:
    and makes it the default profile (first install only, or with `-DefaultShell`). If the profile defaults in
    `settings.json` are still empty, it also sets the Nerd Font for all other profiles (PowerShell, Command Prompt,
    the Visual Studio developer shells).
+7. Sets VS Code's integrated terminal font (`terminal.integrated.fontFamily`) to the Nerd Font, in
+   `settings.json` for both VS Code and VS Code Insiders, if it isn't already set to something else.
 
 ### Linux (x86_64 / aarch64, any distribution)
 

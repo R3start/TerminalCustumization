@@ -215,6 +215,21 @@ foreach ($settings in Get-ManifestEntries 'wt-defaults-font') {
 }
 Remove-ManifestEntries 'wt-defaults-font'
 
+# --- VS Code integrated terminal font -----------------------------------------------------
+foreach ($settings in Get-ManifestEntries 'vscode-font') {
+    if (-not (Test-Path $settings)) { continue }
+    $json = [IO.File]::ReadAllText($settings)
+    # Matches both the current face value and the one older installs wrote (JetBrainsMono Nerd Font,
+    # before Nerd Fonts v3 renamed the family to JetBrainsMono NFM).
+    $ours = '\s*"terminal\.integrated\.fontFamily"\s*:\s*"JetBrainsMono (Nerd Font|NFM)"\s*,?'
+    if ($json -match $ours) {
+        Backup-File $settings
+        Write-Utf8File $settings ([regex]::Replace($json, $ours, '', 1))
+        Write-Ok "VS Code terminal font setting removed from $settings"
+    }
+}
+Remove-ManifestEntries 'vscode-font'
+
 $clinkScripts = @(Get-ManifestEntries 'clink-scripts')
 $clinkAutorun = @(Get-ManifestEntries 'clink-autorun')
 if ($clinkScripts -or $clinkAutorun) {
