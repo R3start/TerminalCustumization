@@ -628,6 +628,8 @@ restore them by hand if you want the old setup back. PSReadLine is part of Power
 you ran it from: that shell (Nushell, or a bash/PowerShell session that already loaded the old setup) has
 the oh-my-posh prompt hook loaded in memory and would keep failing to find it on every prompt, since a
 running shell can't un-load a hook mid-session. `exit` the fresh `bash` to get back to whatever ran it.
+`uninstall.ps1` does the closest Windows equivalent: a script can't replace its own process the way
+`exec` does on Linux, so instead it opens a fresh PowerShell window and closes the one you ran it from.
 
 ### Manually – Windows
 
@@ -689,7 +691,7 @@ Steps 4-6 below use `&&`; run them in `bash`, not Nushell (type `bash` first if 
 | `install.sh` finishes with no errors, but nothing changed (no prompt, `~/.bashrc` untouched) | Fixed: on a machine with no `~/.local/share/fonts` directory yet, an older version of the script died silently right at the font step, before the shell config step ever ran, and still reported success. Re-run `install.sh` (or pull the latest version first). |
 | `install.sh` fails with HTTP 403 from api.github.com | GitHub rate limit: set `GITHUB_TOKEN` or wait an hour. The script also falls back to the release web pages. |
 | `&&` gives a parser error in Nushell (`shell_andand`) | Nushell doesn't support `&&`/`||` as command separators by design; use `;` or `and`, or just run each command on its own line. Applies to any one-liner in this README you paste into Nushell instead of bash/PowerShell. |
-| After `uninstall.ps1` (or a non-interactive `uninstall.sh`), every prompt now fails to find oh-my-posh | Expected, not a bug: the shell you ran the uninstaller *from* (Nushell, or PowerShell hosting Nushell) already loaded the oh-my-posh prompt hook before you removed it, and that hook can't un-load itself mid-session. Exit that shell (`exit`) and open a new terminal. Run interactively, `uninstall.sh` now hands off to a fresh `bash` itself, so this shouldn't come up there. |
+| After uninstalling, a prompt still fails to find oh-my-posh | Expected, not a bug: the shell you ran the uninstaller *from* already had the oh-my-posh prompt hook loaded, and a running session can't un-load a hook. Both uninstallers now hand off to a fresh shell/window for you when run interactively, so this should only come up for a non-interactive `uninstall.sh` (`curl \| bash`) or `uninstall.ps1` run from a Nushell session it can't reach into (it only replaces the PowerShell window itself). Exit/close that shell and open a new one. |
 | `install.sh` skips eza/bat/zoxide/dust with "no SHA-256 checksum is published" | Those four only publish a checksum through the GitHub API (no separate `.sha256` file), so it's lost the moment that API call fails - almost always GitHub's unauthenticated rate limit (60 requests/hour). Set `GITHUB_TOKEN` (raises it to 5000/hour) and re-run; the warning says so when this is the cause. |
 | winget errors on an old Windows 10 | Update **App Installer** from the Microsoft Store (<https://aka.ms/getwinget>). |
 | Windows Terminal: `[error 2147942402 (0x80070002) when launching nu.exe]` | The profile can't find `nu.exe`. Run `install.ps1` again: it points the profile at the full path of `nu.exe`. If Nushell isn't installed, it switches the default profile back to PowerShell and tells you to run `winget install Nushell.Nushell`. By hand: *Settings → Nushell (Microverse) → Command line* → the output of `(Get-Command nu).Source` in quotes. |
