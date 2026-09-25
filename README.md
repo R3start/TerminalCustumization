@@ -26,6 +26,7 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
 - [Manual installation – Windows](#manual-installation--windows)
 - [Manual installation – Linux](#manual-installation--linux)
 - [Visual Studio 2026 developer shells](#visual-studio-2026-developer-shells)
+- [Browser-based consoles (e.g. Proxmox)](#browser-based-consoles-eg-proxmox)
 - [Upgrading](#upgrading) · [Uninstalling](#uninstalling) · [Troubleshooting](#troubleshooting)
 - [Repository layout](#repository-layout)
 - [Tool guides](docs/tools/README.md)
@@ -54,7 +55,10 @@ Every [tool guide](docs/tools/README.md) has its own screenshot.
   are still installed; `-RemoveOldModules` uninstalls them. The copy of PSReadLine that ships inside PowerShell
   can't be removed; this setup simply doesn't configure it.
 - The bundled Nerd Font v2 files are gone. The latest JetBrainsMono Nerd Font (v3, family name
-  `JetBrainsMono NFM`, the Mono variant so icons keep a single character cell) is downloaded instead.
+  `JetBrainsMono Nerd Font Mono`, the Mono variant so icons keep a single character cell) is downloaded
+  instead. Nerd Fonts v3 also registers a short compatibility name, `JetBrainsMono NFM`; both point to
+  the same files and work everywhere in this repo, but pick the full name when asked (e.g. a browser
+  terminal's own font setting, [see below](#browser-based-consoles-eg-proxmox)).
 - Oh My Posh no longer ships themes in `POSH_THEMES_PATH`/`~/.poshthemes`. The theme is now kept in this repo.
 - All configuration lives in [`config/`](config) and is shared by bash, PowerShell (5.1 and 7) and Nushell.
 
@@ -215,7 +219,7 @@ What it does:
    Also sets up Nushell, the bat theme, and PowerShell if `pwsh` is installed.
 5. New interactive terminals start Nushell automatically.
 
-After installing, **select `JetBrainsMono NFM` in your terminal's settings**. The Windows Terminal
+After installing, **select `JetBrainsMono Nerd Font Mono` in your terminal's settings**. The Windows Terminal
 profile and `--gnome-terminal` do this for you.
 
 ---
@@ -257,11 +261,11 @@ oh-my-posh font install JetBrainsMono
 Alternatively, download `JetBrainsMono.zip` from the latest [Nerd Fonts release](https://github.com/ryanoasis/nerd-fonts/releases/latest),
 extract it, select all `.ttf` files, then right-click → **Install** (or **Install for all users**).
 
-Then set the font in each terminal (Nerd Fonts v3 installs JetBrainsMono under the shortened family
-names `JetBrainsMono NF`/`NFM`/`NFP`, not `JetBrainsMono Nerd Font` — pick the `NFM` (Mono) variant so
-icons keep a single character cell):
-- **Windows Terminal**: *Settings → Profiles → Defaults → Appearance → Font face* → `JetBrainsMono NFM`.
-- **VS Code**: `"terminal.integrated.fontFamily": "JetBrainsMono NFM"` in `settings.json`.
+Then set the font in each terminal (Nerd Fonts v3 splits JetBrainsMono into three variants, `NF`/`NFM`/`NFP`
+— pick the **Mono** one, `JetBrainsMono Nerd Font Mono`, so icons keep a single character cell; not
+`JetBrainsMono Nerd Font`, which doesn't exist as a font name for this family in v3):
+- **Windows Terminal**: *Settings → Profiles → Defaults → Appearance → Font face* → `JetBrainsMono Nerd Font Mono`.
+- **VS Code**: `"terminal.integrated.fontFamily": "JetBrainsMono Nerd Font Mono"` in `settings.json`.
 
 ### 4. Shared configuration files
 
@@ -347,7 +351,7 @@ Windows Terminal starts profiles with the PATH it was launched with, so a bare `
 *"error 2147942402 (0x80070002) when launching `nu.exe`"*.
 
 Without the fragment, you can add a profile by hand: *Settings → Add a new profile → New empty profile*, command line
-`"C:\Program Files\nu\bin\nu.exe"` (the full path from above), font `JetBrainsMono NFM`.
+`"C:\Program Files\nu\bin\nu.exe"` (the full path from above), font `JetBrainsMono Nerd Font Mono`.
 
 VS Code: add `"terminal.integrated.defaultProfile.windows": "Nushell"` and a profile entry
 `"terminal.integrated.profiles.windows": { "Nushell": { "path": "nu.exe" } }`.
@@ -440,7 +444,7 @@ fc-cache -f
 ```
 
 Alternatively, download `JetBrainsMono.tar.xz` from the latest [Nerd Fonts release](https://github.com/ryanoasis/nerd-fonts/releases/latest)
-and extract it into `~/.local/share/fonts`. Then select **JetBrainsMono NFM** in your terminal's preferences.
+and extract it into `~/.local/share/fonts`. Then select **JetBrainsMono Nerd Font Mono** in your terminal's preferences.
 On WSL, install the font on **Windows** instead; the terminal runs there.
 
 ### 3. Shared configuration files
@@ -526,7 +530,27 @@ Studio terminal, and their Windows Terminal profiles) get the same setup:
   profile adds the missing entries itself. The Command Prompt only sees the new tools after a restart.
 - **Font:** Windows Terminal profiles get the Nerd Font through the profile defaults (see step 6 above). For Visual
   Studio's own terminal, choose *Tools → Options → Environment → Fonts and Colors → Show settings for: Terminal* →
-  **JetBrainsMono NFM**.
+  **JetBrainsMono Nerd Font Mono**.
+
+## Browser-based consoles (e.g. Proxmox)
+
+A browser-based terminal (Proxmox VE's Shell/Console tab, most cloud provider consoles, and similar) can't
+use a font installed on the *server* — it renders in your browser, on your local machine, so it needs a font
+setting of its own and the font needs to be installed locally. Without that, prompt and `eza` icons show up
+as boxes or `?`.
+
+**Proxmox VE** (the `xterm.js`-based Shell/Console, not a VM's noVNC display — that's a remote framebuffer
+and depends on the font installed *inside* the guest OS instead):
+
+1. Click your username in the top-right corner → **My Settings**.
+2. In the **xterm.js** panel, find **Font-Family**.
+3. Enter `JetBrainsMono Nerd Font Mono` exactly (case and spacing matter — a near-miss fails silently and
+   falls back to a generic font with no error) → **Save**.
+4. Open a new console tab.
+
+This needs the font installed on **your** machine (the one running the browser), not on the Proxmox host or
+the VM/container. Chrome tends to pick this up reliably; a few users report Firefox being flakier with it.
+The same idea applies to any other browser-based console with its own font setting.
 
 ## Upgrading
 
@@ -679,7 +703,7 @@ Steps 4-6 below use `&&`; run them in `bash`, not Nushell (type `bash` first if 
 
 | Problem | Fix |
 |---------|-----|
-| Squares or `?` instead of icons | Select **JetBrainsMono NFM** in the terminal settings (Nerd Fonts v3 installs it under that shortened name, not "JetBrainsMono Nerd Font"). On WSL/SSH, install the font on the machine running the terminal. |
+| Squares or `?` instead of icons | Select **JetBrainsMono Nerd Font Mono** in the terminal settings (that's the Mono variant Nerd Fonts v3 installs — not "JetBrainsMono Nerd Font", which doesn't exist for this family). On WSL/SSH, install the font on the machine running the terminal. A browser-based console (Proxmox, etc.) needs its own font setting — [see below](#browser-based-consoles-eg-proxmox). |
 | Garbled symbols (e.g. `Γöé`) at the start of some lines, mainly from `bat` | The console started on the system OEM codepage instead of UTF-8, so `bat`'s box-drawing characters get misread. The profile/Nushell config/Clink script all switch it to UTF-8 (`chcp 65001`) on startup; if you still see this, run `chcp 65001` by hand or re-run the installer to pick up the fix. |
 | `command not found` right after installing | Open a new terminal. On Linux, check that `~/.local/bin` is in `PATH`. |
 | PowerShell: "running scripts is disabled" | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |

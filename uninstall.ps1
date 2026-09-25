@@ -204,9 +204,10 @@ foreach ($settings in $settingsFiles) {
 foreach ($settings in Get-ManifestEntries 'wt-defaults-font') {
     if (-not (Test-Path $settings)) { continue }
     $json = [IO.File]::ReadAllText($settings)
-    # Matches both the current face value and the one older installs wrote (JetBrainsMono Nerd Font,
-    # before Nerd Fonts v3 renamed the family to JetBrainsMono NFM).
-    $ours = '"defaults"\s*:\s*\{\s*"font"\s*:\s*\{\s*"face"\s*:\s*"JetBrainsMono (Nerd Font|NFM)"\s*\}\s*\}'
+    # Matches the current face value and the two older ones installs wrote before settling on the
+    # full typographic name: JetBrainsMono NFM (Nerd Fonts v3's short compatibility name) and, before
+    # that, JetBrainsMono Nerd Font (before Nerd Fonts v3 renamed the family at all).
+    $ours = '"defaults"\s*:\s*\{\s*"font"\s*:\s*\{\s*"face"\s*:\s*"JetBrainsMono (Nerd Font Mono|NFM|Nerd Font)"\s*\}\s*\}'
     if ($json -match $ours) {
         Backup-File $settings
         Write-Utf8File $settings ([regex]::Replace($json, $ours, '"defaults": {}', 1))
@@ -219,9 +220,10 @@ Remove-ManifestEntries 'wt-defaults-font'
 foreach ($settings in Get-ManifestEntries 'vscode-font') {
     if (-not (Test-Path $settings)) { continue }
     $json = [IO.File]::ReadAllText($settings)
-    # Matches both the current face value and the one older installs wrote (JetBrainsMono Nerd Font,
-    # before Nerd Fonts v3 renamed the family to JetBrainsMono NFM).
-    $ours = '\s*"terminal\.integrated\.fontFamily"\s*:\s*"JetBrainsMono (Nerd Font|NFM)"\s*,?'
+    # Matches the current face value and the two older ones installs wrote before settling on the
+    # full typographic name: JetBrainsMono NFM (Nerd Fonts v3's short compatibility name) and, before
+    # that, JetBrainsMono Nerd Font (before Nerd Fonts v3 renamed the family at all).
+    $ours = '\s*"terminal\.integrated\.fontFamily"\s*:\s*"JetBrainsMono (Nerd Font Mono|NFM|Nerd Font)"\s*,?'
     if ($json -match $ours) {
         Backup-File $settings
         Write-Utf8File $settings ([regex]::Replace($json, $ours, '', 1))

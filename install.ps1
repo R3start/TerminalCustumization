@@ -566,13 +566,13 @@ foreach ($settings in $settingsFiles) {
     $json = [IO.File]::ReadAllText($settings)
     $emptyDefaults = '"defaults"\s*:\s*\{\s*\}'
     if ($json -match $emptyDefaults) {
-        $json = [regex]::Replace($json, $emptyDefaults, '"defaults": { "font": { "face": "JetBrainsMono NFM" } }', 1)
+        $json = [regex]::Replace($json, $emptyDefaults, '"defaults": { "font": { "face": "JetBrainsMono Nerd Font Mono" } }', 1)
         if (Update-FileIfChanged $settings $json) {
             Add-ManifestEntry 'wt-defaults-font' $settings
             Write-Ok "all Windows Terminal profiles use JetBrainsMono Nerd Font Mono ($settings)"
         }
     } elseif ($json -notmatch 'Nerd Font|NFM?P?\b') {
-        Write-Warn "Windows Terminal: set the font of your other profiles (Settings > Defaults > Appearance > Font face) to 'JetBrainsMono NFM' for the icons."
+        Write-Warn "Windows Terminal: set the font of your other profiles (Settings > Defaults > Appearance > Font face) to 'JetBrainsMono Nerd Font Mono' for the icons."
     }
 }
 
@@ -593,10 +593,10 @@ if (-not $vscodeSettingsFiles) {
             Write-Ok "VS Code already has a terminal font set, left alone ($settings)"
             continue
         }
-        $updated = ([regex]'\{').Replace($json, "{`r`n    ""terminal.integrated.fontFamily"": ""JetBrainsMono NFM"",", 1)
+        $updated = ([regex]'\{').Replace($json, "{`r`n    ""terminal.integrated.fontFamily"": ""JetBrainsMono Nerd Font Mono"",", 1)
         if (Update-FileIfChanged $settings $updated) {
             Add-ManifestEntry 'vscode-font' $settings
-            Write-Ok "VS Code integrated terminal uses JetBrainsMono NFM ($settings)"
+            Write-Ok "VS Code integrated terminal uses JetBrainsMono Nerd Font Mono ($settings)"
         }
     }
 }
@@ -604,7 +604,7 @@ if (-not $vscodeSettingsFiles) {
 # --- done --------------------------------------------------------------------------------
 Write-Step 'Done'
 Write-Host '  Open a new Windows Terminal tab/window to start Nushell with the new prompt.'
-Write-Host "  Other terminals (Visual Studio's terminal, conhost): set the font to 'JetBrainsMono NFM'."
+Write-Host "  Other terminals (Visual Studio's terminal, conhost): set the font to 'JetBrainsMono Nerd Font Mono'."
 Write-Host '  Restart Visual Studio (and other programs that were open during the install) so their shells get the new PATH.'
 Write-Host '  Prompt still looks old? Run: Get-Content $PROFILE  - and look for oh-my-posh lines outside the terminal-customization block.'
 if ((Test-Command gh) -and (Invoke-Quiet { gh auth status }) -ne 0) { Write-Host "  Run 'gh auth login' to sign in to GitHub." }
